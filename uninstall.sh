@@ -38,6 +38,9 @@ if [ -f /etc/config/olcrtc ]; then
     info "UCI конфиг удалён"
 fi
 
+# Удаляем сгенерированный YAML и data-директорию
+rm -rf /etc/olcrtc && info "Директория /etc/olcrtc удалена" || true
+
 # Удаляем файлы LuCI
 rm -f  /usr/share/luci/menu.d/luci-app-olcrtc.json  && info "LuCI меню удалено"
 rm -f  /usr/share/rpcd/acl.d/luci-app-olcrtc.json   && info "ACL rpcd удалён"

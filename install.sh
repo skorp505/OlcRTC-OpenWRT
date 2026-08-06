@@ -18,6 +18,9 @@ LUCI_MENU="/usr/share/luci/menu.d/luci-app-olcrtc.json"
 LUCI_ACL="/usr/share/rpcd/acl.d/luci-app-olcrtc.json"
 LUCI_VIEW_DIR="/www/luci-static/resources/view/olcrtc"
 LUCI_VIEW="${LUCI_VIEW_DIR}/main.js"
+DATA_DIR="/etc/olcrtc/data"
+DATA_NAMES_URL="${REPO_RAW}/files/etc/olcrtc/data/names"
+DATA_SURNAMES_URL="${REPO_RAW}/files/etc/olcrtc/data/surnames"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -103,6 +106,12 @@ mkdir -p "$LUCI_VIEW_DIR"
 wget -q -O "$LUCI_VIEW" "${REPO_RAW}/files/www/luci-static/resources/view/olcrtc/main.js" || \
     error "Не удалось скачать JS-вид LuCI"
 
+# ── Data-директория (names/surnames для olcrtc) ──────────
+info "Устанавливаем data-файлы olcrtc..."
+mkdir -p "$DATA_DIR"
+wget -q -O "$DATA_DIR/names"    "$DATA_NAMES_URL"    || warn "Не удалось скачать data/names"
+wget -q -O "$DATA_DIR/surnames" "$DATA_SURNAMES_URL" || warn "Не удалось скачать data/surnames"
+
 # ── Перезапуск сервисов ───────────────────────────────────
 info "Перезапускаем rpcd и uhttpd..."
 /etc/init.d/rpcd    restart 2>/dev/null || warn "rpcd не перезапущен (возможно не установлен)"
@@ -113,7 +122,7 @@ echo "╔═══════════════════════�
 echo "║  Установка завершена!                                ║"
 echo "║                                                      ║"
 echo "║  Откройте LuCI: Службы → OlcRTC                      ║"
-echo "║  Заполните Room ID, Client ID и ключ —              ║"
+echo "║  Укажите сервис, Room ID и ключ —                    ║"
 echo "║  затем нажмите Старт                                 ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""

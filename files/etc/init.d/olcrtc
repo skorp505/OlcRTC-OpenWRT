@@ -1,5 +1,6 @@
 #!/bin/sh /etc/rc.common
 # Скрипт инициализации OlcRTC для OpenWRT
+# Генерирует YAML-конфиг клиента из UCI и запускает olcrtc /etc/olcrtc/client.yaml
 # Часть проекта OlcRTC-OpenWRT
 
 USE_PROCD=1
@@ -8,37 +9,56 @@ STOP=10
 
 PIDFILE=/var/run/olcrtc.pid
 LOGTAG="olcrtc"
+BINARY=/usr/bin/olcrtc
+CFG_DIR=/etc/olcrtc
+CFG_FILE=$CFG_DIR/client.yaml
+DATA_DIR=$CFG_DIR/data
 
-start_service() {
-    local binary carrier transport room_id client_id key
+# Экранирование значения для YAML (одинарные кавычки, удваиваем встроенные)
+yaml_q() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+}
+
+# Проверка: не-loopback SOCKS-адрес требует логин и пароль (требование olcrtc)
+is_loopback() {
+    case "$1" in
+        127.*|::1|localhost) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+write_config() {
+    local carrier transport room_id key auth_token room_channel
     local socks_host socks_port socks_user socks_pass dns debug
     local vp8_fps vp8_batch
     local sei_fps sei_batch sei_frag sei_ack_ms
     local video_codec video_w video_h video_fps video_bitrate video_hw
     local video_qr_recovery video_qr_size video_tile_module video_tile_rs ffmpeg_bin
-
-    binary='/usr/bin/olcrtc'
+    local liveness_interval liveness_timeout liveness_failures
+    local lifecycle_max_session_duration traffic_max_payload_size
+    local traffic_min_delay traffic_max_delay
 
     config_load olcrtc
-    config_get carrier          config carrier          'telemost'
-    config_get transport        config transport        'vp8channel'
+    config_get carrier          config carrier          'jitsi'
+    config_get transport        config transport        'datachannel'
     config_get room_id          config room_id          ''
-    config_get client_id        config client_id        ''
     config_get key              config key              ''
-    config_get socks_host       config socks_host       '0.0.0.0'
+    config_get auth_token       config auth_token       ''
+    config_get room_channel     config room_channel     ''
+    config_get socks_host       config socks_host       '127.0.0.1'
     config_get socks_port       config socks_port       '1080'
     config_get socks_user       config socks_user       ''
     config_get socks_pass       config socks_pass       ''
     config_get dns              config dns              '1.1.1.1:53'
     config_get debug            config debug            '0'
-    config_get vp8_fps          config vp8_fps          '25'
-    config_get vp8_batch        config vp8_batch        '1'
-    config_get sei_fps          config sei_fps          '60'
+    config_get vp8_fps          config vp8_fps          '30'
+    config_get vp8_batch        config vp8_batch        '64'
+    config_get sei_fps          config sei_fps          '30'
     config_get sei_batch        config sei_batch        '64'
     config_get sei_frag         config sei_frag         '900'
     config_get sei_ack_ms       config sei_ack_ms       '2000'
     config_get video_codec      config video_codec      'qrcode'
-    config_get video_w          config video_w          '1920'
+    config_get video_w          config video_w          '1080'
     config_get video_h          config video_h          '1080'
     config_get video_fps        config video_fps        '30'
     config_get video_bitrate    config video_bitrate    '2M'
@@ -48,79 +68,126 @@ start_service() {
     config_get video_tile_module config video_tile_module '4'
     config_get video_tile_rs    config video_tile_rs    '20'
     config_get ffmpeg_bin       config ffmpeg           'ffmpeg'
+    config_get liveness_interval config liveness_interval '10s'
+    config_get liveness_timeout  config liveness_timeout  '5s'
+    config_get liveness_failures config liveness_failures '3'
+    config_get lifecycle_max_session_duration config lifecycle_max_session_duration ''
+    config_get traffic_max_payload_size config traffic_max_payload_size '0'
+    config_get traffic_min_delay config traffic_min_delay ''
+    config_get traffic_max_delay config traffic_max_delay ''
+
+    case "$socks_port" in
+        ''|*[!0-9]*|0) socks_port=1080 ;;
+    esac
+
+    mkdir -p "$CFG_DIR" "$DATA_DIR"
+
+    {
+        echo "# Автоматически сгенерировано /etc/init.d/olcrtc — не редактируйте вручную"
+        echo "mode: cnc"
+        echo "auth:"
+        echo "  provider: $(yaml_q "$carrier")"
+        [ -n "$auth_token" ] && echo "  token: $(yaml_q "$auth_token")"
+        echo "room:"
+        echo "  id: $(yaml_q "$room_id")"
+        [ -n "$room_channel" ] && echo "  channel: $(yaml_q "$room_channel")"
+        echo "crypto:"
+        echo "  key: $(yaml_q "$key")"
+        echo "net:"
+        echo "  transport: $(yaml_q "$transport")"
+        echo "  dns: $(yaml_q "$dns")"
+        echo "socks:"
+        echo "  host: $(yaml_q "$socks_host")"
+        echo "  port: $socks_port"
+        [ -n "$socks_user" ] && echo "  user: $(yaml_q "$socks_user")"
+        [ -n "$socks_pass" ] && echo "  pass: $(yaml_q "$socks_pass")"
+        echo "data: $DATA_DIR"
+        if [ "$debug" = "1" ]; then
+            echo "debug: true"
+        else
+            echo "debug: false"
+        fi
+
+        case "$transport" in
+            vp8channel)
+                echo "vp8:"
+                echo "  fps: $vp8_fps"
+                echo "  batch_size: $vp8_batch"
+                ;;
+            seichannel)
+                echo "sei:"
+                echo "  fps: $sei_fps"
+                echo "  batch_size: $sei_batch"
+                echo "  fragment_size: $sei_frag"
+                echo "  ack_timeout_ms: $sei_ack_ms"
+                ;;
+            videochannel)
+                echo "video:"
+                echo "  codec: $(yaml_q "$video_codec")"
+                echo "  width: $video_w"
+                echo "  height: $video_h"
+                echo "  fps: $video_fps"
+                echo "  bitrate: $(yaml_q "$video_bitrate")"
+                echo "  hw: $(yaml_q "$video_hw")"
+                echo "  qr_recovery: $(yaml_q "$video_qr_recovery")"
+                echo "  qr_size: $video_qr_size"
+                echo "  tile_module: $video_tile_module"
+                echo "  tile_rs: $video_tile_rs"
+                echo "ffmpeg: $(yaml_q "$ffmpeg_bin")"
+                ;;
+        esac
+
+        echo "liveness:"
+        echo "  interval: $(yaml_q "$liveness_interval")"
+        echo "  timeout: $(yaml_q "$liveness_timeout")"
+        echo "  failures: $liveness_failures"
+
+        if [ -n "$lifecycle_max_session_duration" ]; then
+            echo "lifecycle:"
+            echo "  max_session_duration: $(yaml_q "$lifecycle_max_session_duration")"
+        fi
+
+        if [ -n "$traffic_max_payload_size" ] && [ "$traffic_max_payload_size" != "0" ]; then
+            echo "traffic:"
+            echo "  max_payload_size: $traffic_max_payload_size"
+            [ -n "$traffic_min_delay" ] && echo "  min_delay: $(yaml_q "$traffic_min_delay")"
+            [ -n "$traffic_max_delay" ] && echo "  max_delay: $(yaml_q "$traffic_max_delay")"
+        fi
+    } > "$CFG_FILE"
+
+    logger -t "$LOGTAG" "Конфиг записан: $CFG_FILE"
+}
+
+start_service() {
+    local room_id key socks_host socks_user socks_pass
+
+    if [ ! -x "$BINARY" ]; then
+        logger -t "$LOGTAG" "Ошибка: бинарник $BINARY не найден или не исполняемый"
+        return 1
+    fi
+
+    config_load olcrtc
+    config_get room_id    config room_id    ''
+    config_get key        config key        ''
+    config_get socks_host config socks_host '127.0.0.1'
+    config_get socks_user config socks_user ''
+    config_get socks_pass config socks_pass ''
 
     if [ -z "$room_id" ] || [ -z "$key" ]; then
         logger -t "$LOGTAG" "Ошибка: не заданы Room ID или ключ — запуск невозможен"
         return 1
     fi
 
-    if [ -z "$client_id" ]; then
-        logger -t "$LOGTAG" "Ошибка: не задан Client ID — запуск невозможен"
-        return 1
+    if ! is_loopback "$socks_host" && [ -z "$socks_user" ] && [ -z "$socks_pass" ]; then
+        logger -t "$LOGTAG" "Предупреждение: SOCKS5 на адресе $socks_host требует логин и пароль (olcrtc откажет в запуске)"
     fi
 
-    if [ ! -x "$binary" ]; then
-        logger -t "$LOGTAG" "Ошибка: бинарник $binary не найден или не исполняемый"
-        return 1
-    fi
+    write_config
 
-    logger -t "$LOGTAG" "Запуск клиента: binary=$binary carrier=$carrier transport=$transport порт=$socks_port"
+    logger -t "$LOGTAG" "Запуск клиента: $BINARY $CFG_FILE"
 
     procd_open_instance
-    procd_set_param command "$binary" \
-        -mode cnc \
-        -carrier "$carrier" \
-        -transport "$transport" \
-        -id "$room_id" \
-        -client-id "$client_id" \
-        -key "$key" \
-        -link direct \
-        -data data \
-        -dns "$dns" \
-        -socks-host "$socks_host" \
-        -socks-port "$socks_port"
-
-    [ -n "$socks_user" ] && procd_append_param command -socks-user "$socks_user"
-    [ -n "$socks_pass" ] && procd_append_param command -socks-pass "$socks_pass"
-    [ "$debug" = "1" ]   && procd_append_param command --debug
-
-    case "$transport" in
-        vp8channel)
-            procd_append_param command \
-                -vp8-fps "$vp8_fps" \
-                -vp8-batch "$vp8_batch"
-            ;;
-        seichannel)
-            procd_append_param command \
-                -fps "$sei_fps" \
-                -batch "$sei_batch" \
-                -frag "$sei_frag" \
-                -ack-ms "$sei_ack_ms"
-            ;;
-        videochannel)
-            procd_append_param command \
-                -video-codec "$video_codec" \
-                -video-w "$video_w" \
-                -video-h "$video_h" \
-                -video-fps "$video_fps" \
-                -video-bitrate "$video_bitrate" \
-                -video-hw "$video_hw" \
-                -ffmpeg "$ffmpeg_bin"
-            case "$video_codec" in
-                qrcode)
-                    procd_append_param command \
-                        -video-qr-recovery "$video_qr_recovery" \
-                        -video-qr-size "$video_qr_size"
-                    ;;
-                tile)
-                    procd_append_param command \
-                        -video-tile-module "$video_tile_module" \
-                        -video-tile-rs "$video_tile_rs"
-                    ;;
-            esac
-            ;;
-    esac
-
+    procd_set_param command "$BINARY" "$CFG_FILE"
     procd_set_param respawn 3600 5 0
     procd_set_param stdout 1
     procd_set_param stderr 1

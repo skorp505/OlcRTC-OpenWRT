@@ -64,15 +64,34 @@ var callExec = rpc.declare({
 });
 
 /* ══════════════════════════════════════════════════════════
-   Матрица совместимости carrier × transport
-   Jazz + datachannel: полностью запрещён.
+   Провайдеры (carrier), транспорты и матрица совместимости
+   2 = работает, 1 = нестабильно (~), 0 = не работает
+   Источник: docs/settings.md актуального olcrtc
+   Рекомендуемая комбинация: jitsi + datachannel
    ══════════════════════════════════════════════════════════ */
 
+var CARRIERS   = ['jitsi', 'telemost', 'wbstream'];
+var TRANSPORTS = ['datachannel', 'vp8channel', 'seichannel', 'videochannel'];
+
 var COMPAT = {
-    telemost : ['vp8channel', 'videochannel'],
-    jazz     : ['vp8channel', 'seichannel', 'videochannel'],
-    wbstream : ['datachannel', 'vp8channel', 'seichannel', 'videochannel']
+    telemost : { datachannel: 0, vp8channel: 2, seichannel: 0, videochannel: 2 },
+    wbstream : { datachannel: 1, vp8channel: 2, seichannel: 2, videochannel: 2 },
+    jitsi    : { datachannel: 2, vp8channel: 1, seichannel: 1, videochannel: 1 }
 };
+
+var CARRIER_NAMES = { jitsi: 'Jitsi', telemost: 'Telemost', wbstream: 'WBStream' };
+var TRANSPORT_LABELS = { datachannel: 'DataCh', vp8channel: 'VP8Ch', seichannel: 'SEICh', videochannel: 'VideoCh' };
+
+function compatStatus(carrier, transport) {
+    var m = COMPAT[carrier];
+    return (m && m[transport] !== undefined) ? m[transport] : 0;
+}
+
+function statusIcon(status) {
+    if (status === 2) return { ch: '✓', color: '#3fb950' };
+    if (status === 1) return { ch: '~', color: '#d29922' };
+    return { ch: '✗', color: '#f85149' };
+}
 
 /* ══════════════════════════════════════════════════════════
    Утилиты
@@ -140,7 +159,9 @@ function parseTransportParams(transport, paramsStr) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   Парсер URI olcrtc://
+   Парсер URI olcrtc://  (актуальный формат docs/uri.md)
+   olcrtc://<Auth>?<Transport>[<key=val&...>]@<RoomID>#<Key>[$<MIMO>]
+   Поддерживается legacy-вариант #Key%ClientId без $MIMO.
    ══════════════════════════════════════════════════════════ */
 
 function parseOlcrtcUri(raw) {
@@ -174,30 +195,25 @@ function parseOlcrtcUri(raw) {
     }
 
     i = rest.indexOf('#');
-    if (i < 0) return null;
+    if (i < 1) return null;
     var roomId = rest.slice(0, i);
     rest = rest.slice(i + 1);
 
-    i = rest.indexOf('%');
-    if (i < 1) return null;
-    var key = rest.slice(0, i);
-    rest = rest.slice(i + 1);
+    /* <Key> [$<MIMO>]  или legacy <Key>[%<ClientId>] */
+    var dollar = rest.indexOf('$');
+    var pct    = rest.indexOf('%');
+    var sep    = dollar === -1 ? (pct === -1 ? -1 : pct) : dollar;
+    var key    = sep === -1 ? rest : rest.slice(0, sep);
+    var mimo   = dollar !== -1 ? rest.slice(dollar + 1) : '';
 
-    i = rest.indexOf('$');
-    var clientId = i !== -1 ? rest.slice(0, i) : rest;
-    var mimo     = i !== -1 ? rest.slice(i + 1) : '';
-
-    var knownCarriers   = ['telemost', 'jazz', 'wbstream'];
-    var knownTransports = ['datachannel', 'vp8channel', 'seichannel', 'videochannel'];
-    if (knownCarriers.indexOf(carrier)     === -1) return null;
-    if (knownTransports.indexOf(transport) === -1) return null;
-    if (key.length !== 64)                         return null;
-    if (!clientId)                                 return null;
-    if (carrier === 'jazz' && transport === 'datachannel') return null;
+    if (CARRIERS.indexOf(carrier)     === -1) return null;
+    if (TRANSPORTS.indexOf(transport) === -1) return null;
+    if (key.length !== 64)                     return null;
+    if (compatStatus(carrier, transport) === 0) return null;
 
     return {
         carrier: carrier, transport: transport,
-        room_id: roomId,  key: key, client_id: clientId,
+        room_id: roomId, key: key,
         mimo: mimo, transportParams: transportParams
     };
 }
@@ -220,7 +236,7 @@ function refreshLabel(str) {
     var num  = parseInt(str, 10);
     var unit = str.replace(/[0-9]/g, '').trim().toLowerCase();
     var names = { s: 'сек', m: 'мин', h: 'ч', d: 'д' };
-    return num + ' ' + (names[unit] || 'мин');
+    return num + ' ' + (names[unit] || 'мин');
 }
 
 function parseSubscription(text) {
@@ -343,7 +359,6 @@ return view.extend({
     _transportSel        : null,
     _carrierSel          : null,
     _roomInput           : null,
-    _clientInput         : null,
     _keyInput            : null,
     _vp8Section          : null,
     _seiSection          : null,
@@ -430,12 +445,12 @@ return view.extend({
     _updateTransportOptions: function (carrier) {
         var sel = this._transportSel;
         if (!sel) return;
-        var allowed = COMPAT[carrier] || COMPAT['telemost'];
+        var allowed = TRANSPORTS.filter(function (t) { return compatStatus(carrier, t) > 0; });
         for (var i = 0; i < sel.options.length; i++)
             sel.options[i].disabled = allowed.indexOf(sel.options[i].value) === -1;
         if (allowed.indexOf(sel.value) === -1) {
-            sel.value = 'vp8channel';
-            this._saveField('transport', 'vp8channel');
+            sel.value = allowed.length ? allowed[0] : 'vp8channel';
+            this._saveField('transport', sel.value);
         }
         this._updateTransportSections(sel.value);
     },
@@ -460,11 +475,10 @@ return view.extend({
 
         if (self._selectedServer) self._selectedServer.card.style.cssText = self._selectedServer.normalStyle;
 
-        if (self._carrierSel)   self._carrierSel.value    = p.carrier;
-        if (self._transportSel) self._transportSel.value  = p.transport;
-        if (self._roomInput)    self._roomInput.value     = p.room_id;
-        if (self._clientInput)  self._clientInput.value   = p.client_id;
-        if (self._keyInput)     self._keyInput.value      = p.key;
+        if (self._carrierSel)   self._carrierSel.value   = p.carrier;
+        if (self._transportSel) self._transportSel.value = p.transport;
+        if (self._roomInput)    self._roomInput.value    = p.room_id;
+        if (self._keyInput)     self._keyInput.value     = p.key;
 
         self._updateTransportOptions(p.carrier);
         if (self._updateMatrix) self._updateMatrix(p.carrier, p.transport);
@@ -472,7 +486,7 @@ return view.extend({
         var tp = p.transportParams || {};
         var uciVals = {
             carrier: p.carrier, transport: p.transport,
-            room_id: p.room_id, client_id: p.client_id, key: p.key
+            room_id: p.room_id, key: p.key
         };
         Object.keys(tp).forEach(function (k) {
             uciVals[k] = tp[k];
@@ -492,7 +506,7 @@ return view.extend({
             card       : cardEl,
             normalStyle: normalStyle,
             values     : { carrier: p.carrier, transport: p.transport,
-                           room_id: p.room_id, client_id: p.client_id, key: p.key }
+                           room_id: p.room_id, key: p.key }
         };
         cardEl.style.cssText = CARD_SELECTED_STYLE;
     },
@@ -518,7 +532,7 @@ return view.extend({
         blockEl.style.borderColor  = subBorder;
 
         /* Заголовок */
-        var title = (sub.icon ? sub.icon + ' ' : '') + (sub.name || 'Подписка');
+        var title = (sub.icon ? sub.icon + ' ' : '') + (sub.name || 'Подписка');
         var stats = (sub.used ? sub.used : '') + (sub.available ? ' / ' + sub.available : '');
         var refreshInfo = '↻ каждые ' + refreshLabel(sub.refresh);
 
@@ -534,7 +548,7 @@ return view.extend({
         }, [
             E('div', {}, [
                 E('div', { style: 'font-size:1em;color:#e6edf3;font-weight:500;' },
-                    title + (stats ? ' ' + stats : '')),
+                    title + (stats ? ' ' + stats : '')),
                 E('div', { style: 'font-size:0.8em;color:#8b949e;margin-top:2px;' }, refreshInfo)
             ]),
             deleteBtn
@@ -555,7 +569,7 @@ return view.extend({
         sub.servers.forEach(function (server, idx) {
             var p    = server.parsed;
             var name = server.name ||
-                       (p.mimo ? p.mimo.split('/')[0].trim() : 'Сервер ' + (idx + 1));
+                       (p.mimo ? p.mimo.split('/')[0].trim() : 'Сервер ' + (idx + 1));
 
             /* Цвет карточки */
             var cardBg     = server.color ? hexToRgba(server.color, 0.07) : 'rgba(138,92,246,0.06)';
@@ -568,7 +582,7 @@ return view.extend({
             var lines = [
                 E('div', { style: 'font-size:0.95em;color:#e6edf3;font-weight:500;margin-bottom:4px;' +
                                   'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' },
-                    (server.icon ? server.icon + ' ' : '') + name),
+                    (server.icon ? server.icon + ' ' : '') + name),
                 E('div', { style: 'font-size:0.78em;color:#8b949e;' },
                     p.carrier + ' / ' + p.transport)
             ];
@@ -735,25 +749,26 @@ return view.extend({
         self._hwid = uci.get('olcrtc', 'config', 'hwid') || '';
 
         var cfg = {
-            carrier          : uci.get('olcrtc', 'config', 'carrier')           || 'telemost',
-            transport        : uci.get('olcrtc', 'config', 'transport')         || 'vp8channel',
+            carrier          : uci.get('olcrtc', 'config', 'carrier')           || 'jitsi',
+            transport        : uci.get('olcrtc', 'config', 'transport')         || 'datachannel',
             room_id          : uci.get('olcrtc', 'config', 'room_id')           || '',
-            client_id        : uci.get('olcrtc', 'config', 'client_id')         || '',
             key              : uci.get('olcrtc', 'config', 'key')               || '',
-            socks_host       : uci.get('olcrtc', 'config', 'socks_host')        || '0.0.0.0',
+            auth_token       : uci.get('olcrtc', 'config', 'auth_token')        || '',
+            room_channel     : uci.get('olcrtc', 'config', 'room_channel')      || '',
+            socks_host       : uci.get('olcrtc', 'config', 'socks_host')        || '127.0.0.1',
             socks_port       : uci.get('olcrtc', 'config', 'socks_port')        || '1080',
             socks_user       : uci.get('olcrtc', 'config', 'socks_user')        || '',
             socks_pass       : uci.get('olcrtc', 'config', 'socks_pass')        || '',
             dns              : uci.get('olcrtc', 'config', 'dns')               || '1.1.1.1:53',
             debug            : uci.get('olcrtc', 'config', 'debug')             || '0',
-            vp8_fps          : uci.get('olcrtc', 'config', 'vp8_fps')           || '25',
-            vp8_batch        : uci.get('olcrtc', 'config', 'vp8_batch')         || '1',
-            sei_fps          : uci.get('olcrtc', 'config', 'sei_fps')           || '60',
+            vp8_fps          : uci.get('olcrtc', 'config', 'vp8_fps')           || '30',
+            vp8_batch        : uci.get('olcrtc', 'config', 'vp8_batch')         || '64',
+            sei_fps          : uci.get('olcrtc', 'config', 'sei_fps')           || '30',
             sei_batch        : uci.get('olcrtc', 'config', 'sei_batch')         || '64',
             sei_frag         : uci.get('olcrtc', 'config', 'sei_frag')          || '900',
             sei_ack_ms       : uci.get('olcrtc', 'config', 'sei_ack_ms')        || '2000',
             video_codec      : uci.get('olcrtc', 'config', 'video_codec')       || 'qrcode',
-            video_w          : uci.get('olcrtc', 'config', 'video_w')           || '1920',
+            video_w          : uci.get('olcrtc', 'config', 'video_w')           || '1080',
             video_h          : uci.get('olcrtc', 'config', 'video_h')           || '1080',
             video_fps        : uci.get('olcrtc', 'config', 'video_fps')         || '30',
             video_bitrate    : uci.get('olcrtc', 'config', 'video_bitrate')     || '2M',
@@ -762,7 +777,14 @@ return view.extend({
             video_qr_size    : uci.get('olcrtc', 'config', 'video_qr_size')     || '0',
             video_tile_module: uci.get('olcrtc', 'config', 'video_tile_module') || '4',
             video_tile_rs    : uci.get('olcrtc', 'config', 'video_tile_rs')     || '20',
-            ffmpeg           : uci.get('olcrtc', 'config', 'ffmpeg')            || 'ffmpeg'
+            ffmpeg           : uci.get('olcrtc', 'config', 'ffmpeg')            || 'ffmpeg',
+            liveness_interval: uci.get('olcrtc', 'config', 'liveness_interval') || '10s',
+            liveness_timeout : uci.get('olcrtc', 'config', 'liveness_timeout')  || '5s',
+            liveness_failures: uci.get('olcrtc', 'config', 'liveness_failures') || '3',
+            lifecycle_max_session_duration : uci.get('olcrtc', 'config', 'lifecycle_max_session_duration') || '',
+            traffic_max_payload_size : uci.get('olcrtc', 'config', 'traffic_max_payload_size') || '0',
+            traffic_min_delay : uci.get('olcrtc', 'config', 'traffic_min_delay') || '',
+            traffic_max_delay : uci.get('olcrtc', 'config', 'traffic_max_delay') || ''
         };
 
         /* ── Статус ─────────────────────────────────────────── */
@@ -860,35 +882,37 @@ return view.extend({
 
         /* ── Матрица совместимости ───────────────────────────── */
         var matrixCells = {};
-        var carriers   = ['telemost', 'jazz', 'wbstream'];
-        var transports = ['datachannel', 'vp8channel', 'seichannel', 'videochannel'];
 
         var TH_STYLE  = 'padding:4px 10px;text-align:center;font-size:0.8em;color:#9a7fc0;font-weight:normal;border-bottom:1px solid rgba(138,92,246,0.18);';
         var THL_STYLE = 'padding:4px 10px;text-align:left;font-size:0.8em;color:#9a7fc0;font-weight:normal;border-bottom:1px solid rgba(138,92,246,0.18);';
 
-        function cellStyle(active) {
-            return 'padding:4px 10px;text-align:center;font-size:0.85em;' + (active ? 'background:rgba(63,185,80,0.08);' : '');
+        function cellStyle(isCur, status) {
+            var bg = '';
+            if (isCur) bg = 'background:rgba(63,185,80,0.10);';
+            else if (status === 1) bg = 'background:rgba(210,153,34,0.06);';
+            return 'padding:4px 10px;text-align:center;font-size:0.85em;' + bg;
         }
 
         function makeCell(carrier, transport) {
-            var ok    = COMPAT[carrier].indexOf(transport) !== -1;
+            var st    = compatStatus(carrier, transport);
             var isCur = (carrier === cfg.carrier && transport === cfg.transport);
-            var td    = E('td', { style: cellStyle(isCur) },
-                ok ? E('span', { style: 'color:#3fb950;font-size:1.1em;' }, '✓')
-                   : E('span', { style: 'color:#f85149;font-size:1.1em;' }, '✗'));
+            var ic    = statusIcon(st);
+            var td    = E('td', { style: cellStyle(isCur, st) },
+                E('span', { style: 'color:' + ic.color + ';font-size:1.1em;' }, ic.ch));
             matrixCells[carrier + '-' + transport] = td;
             return td;
         }
 
         function updateMatrix(selC, selT) {
-            carriers.forEach(function (c) {
-                transports.forEach(function (t) {
+            CARRIERS.forEach(function (c) {
+                TRANSPORTS.forEach(function (t) {
                     var td    = matrixCells[c + '-' + t];
-                    var ok    = COMPAT[c].indexOf(t) !== -1;
+                    var st    = compatStatus(c, t);
                     var isCur = (c === selC && t === selT);
-                    td.style.cssText = cellStyle(isCur);
+                    var ic    = statusIcon(st);
+                    td.style.cssText = cellStyle(isCur, st);
                     var icon = td.querySelector('span');
-                    if (icon) icon.style.cssText = ok ? 'color:#3fb950;font-size:1.1em;' : 'color:#f85149;font-size:1.1em;';
+                    if (icon) icon.style.cssText = 'color:' + ic.color + ';font-size:1.1em;';
                     var thEl = matrixCells['__th_' + c];
                     if (thEl) thEl.style.color = (c === selC) ? '#e6edf3' : '#8b949e';
                 });
@@ -897,20 +921,24 @@ return view.extend({
         self._updateMatrix = updateMatrix;
 
         var headerCells = [E('th', { style: THL_STYLE }, '')].concat(
-            carriers.map(function (c) {
-                var names = { telemost: 'Telemost', jazz: 'Jazz', wbstream: 'WBStream' };
-                var th = E('th', { style: TH_STYLE + (c === cfg.carrier ? 'color:#e6edf3;' : '') }, names[c]);
+            CARRIERS.map(function (c) {
+                var th = E('th', { style: TH_STYLE + (c === cfg.carrier ? 'color:#e6edf3;' : '') }, CARRIER_NAMES[c]);
                 matrixCells['__th_' + c] = th;
                 return th;
             })
         );
 
-        var tLabels = { datachannel: 'DataCh', vp8channel: 'VP8Ch', seichannel: 'SEICh', videochannel: 'VideoCh' };
-        var matrixRows = transports.map(function (t) {
-            return E('tr', {}, [E('td', { style: 'padding:4px 10px;font-size:0.8em;color:#8b949e;' }, tLabels[t])].concat(
-                carriers.map(function (c) { return makeCell(c, t); })
+        var matrixRows = TRANSPORTS.map(function (t) {
+            return E('tr', {}, [E('td', { style: 'padding:4px 10px;font-size:0.8em;color:#8b949e;' }, TRANSPORT_LABELS[t])].concat(
+                CARRIERS.map(function (c) { return makeCell(c, t); })
             ));
         });
+
+        var matrixLegend = E('div', { style: 'font-size:0.75em;color:#8b949e;margin-top:6px;' }, [
+            E('span', { style: 'color:#3fb950;' }, '✓ работает'), ' · ',
+            E('span', { style: 'color:#d29922;' }, '~ нестабильно'), ' · ',
+            E('span', { style: 'color:#f85149;' }, '✗ не работает')
+        ]);
 
         var matrixTable = E('table', { style: 'border-collapse:collapse;margin-bottom:4px;' }, [
             E('thead', {}, [E('tr', {}, headerCells)]),
@@ -918,7 +946,7 @@ return view.extend({
         ]);
 
         /* ── Carrier / Transport ─────────────────────────────── */
-        var allowed = COMPAT[cfg.carrier] || COMPAT['telemost'];
+        var allowed = TRANSPORTS.filter(function (t) { return compatStatus(cfg.carrier, t) > 0; });
 
         var carrierSel = E('select', {
             class  : 'cbi-input-select',
@@ -930,8 +958,8 @@ return view.extend({
                 self._checkServerSelection('carrier', c);
             }
         }, [
+            E('option', { value: 'jitsi',    selected: cfg.carrier === 'jitsi'    ? '' : null }, 'Jitsi (meet.jit.si или self-hosted)'),
             E('option', { value: 'telemost', selected: cfg.carrier === 'telemost' ? '' : null }, 'Telemost (telemost.yandex.ru)'),
-            E('option', { value: 'jazz',     selected: cfg.carrier === 'jazz'     ? '' : null }, 'Jazz (salutejazz.ru)'),
             E('option', { value: 'wbstream', selected: cfg.carrier === 'wbstream' ? '' : null }, 'Wildberries Stream (stream.wb.ru)')
         ]);
         self._carrierSel = carrierSel;
@@ -946,21 +974,17 @@ return view.extend({
                 self._checkServerSelection('transport', t);
             }
         }, [
-            E('option', { value: 'datachannel',  selected: cfg.transport === 'datachannel'  ? '' : null, disabled: allowed.indexOf('datachannel')  === -1 ? '' : null }, 'datachannel — максимальная скорость (Telemost и Jazz — запрещён)'),
-            E('option', { value: 'vp8channel',   selected: cfg.transport === 'vp8channel'   ? '' : null }, 'vp8channel — работает везде (рекомендуется)'),
-            E('option', { value: 'seichannel',   selected: cfg.transport === 'seichannel'   ? '' : null, disabled: allowed.indexOf('seichannel')   === -1 ? '' : null }, 'seichannel — не для Telemost'),
-            E('option', { value: 'videochannel', selected: cfg.transport === 'videochannel' ? '' : null }, 'videochannel — крайний случай, везде')
+            E('option', { value: 'datachannel',  selected: cfg.transport === 'datachannel'  ? '' : null, disabled: allowed.indexOf('datachannel')  === -1 ? '' : null }, 'datachannel — максимальная скорость (рекомендуется для Jitsi)'),
+            E('option', { value: 'vp8channel',   selected: cfg.transport === 'vp8channel'   ? '' : null, disabled: allowed.indexOf('vp8channel')   === -1 ? '' : null }, 'vp8channel — работает почти везде (для Telemost обязателен)'),
+            E('option', { value: 'seichannel',   selected: cfg.transport === 'seichannel'   ? '' : null, disabled: allowed.indexOf('seichannel')   === -1 ? '' : null }, 'seichannel — только WBStream'),
+            E('option', { value: 'videochannel', selected: cfg.transport === 'videochannel' ? '' : null, disabled: allowed.indexOf('videochannel') === -1 ? '' : null }, 'videochannel — крайний случай')
         ]);
         self._transportSel = transportSel;
 
         /* ── Поля подключения ───────────────────────────────── */
-        var roomH = makeDebounced('room_id',   function (v) { self._checkServerSelection('room_id',   v); });
-        var roomInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.room_id, placeholder: 'Например: 49286587700808', change: roomH.change, input: roomH.input });
+        var roomH = makeDebounced('room_id',   function (v) { self._checkServerSelection('room_id', v); });
+        var roomInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.room_id, placeholder: 'https://meet.example.org/room или ID комнаты', change: roomH.change, input: roomH.input });
         self._roomInput = roomInput;
-
-        var clientH = makeDebounced('client_id', function (v) { self._checkServerSelection('client_id', v); });
-        var clientInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.client_id, placeholder: 'Например: home-router', change: clientH.change, input: clientH.input });
-        self._clientInput = clientInput;
 
         var keyH = makeDebounced('key', function (v) { self._checkServerSelection('key', v); });
         var keyInput = E('input', { class: 'cbi-input-text', type: 'password', value: cfg.key, placeholder: 'e5265a924657a8807dc...', change: keyH.change, input: keyH.input });
@@ -968,16 +992,22 @@ return view.extend({
 
         /* ── SOCKS5 ─────────────────────────────────────────── */
         var socksHostH = makeDebounced('socks_host');
-        var socksHostInput  = E('input', { class: 'cbi-input-text', type: 'text',     value: cfg.socks_host, placeholder: '0.0.0.0', change: socksHostH.change, input: socksHostH.input });
+        var socksHostInput  = E('input', { class: 'cbi-input-text', type: 'text',     value: cfg.socks_host, placeholder: '127.0.0.1', change: socksHostH.change, input: socksHostH.input });
         var socksPortInput  = E('input', { class: 'cbi-input-text', type: 'number',   value: cfg.socks_port, placeholder: '1080', min: '1', max: '65535', change: function (ev) { var v = parseInt(ev.target.value, 10); if (v >= 1 && v <= 65535) self._saveField('socks_port', String(v)); } });
         var socksUserH      = makeDebounced('socks_user');
         var socksUserInput  = E('input', { class: 'cbi-input-text', type: 'text',     value: cfg.socks_user, placeholder: '(без аутентификации — оставьте пустым)', change: socksUserH.change, input: socksUserH.input });
         var socksPassH      = makeDebounced('socks_pass');
         var socksPassInput  = E('input', { class: 'cbi-input-text', type: 'password', value: cfg.socks_pass, placeholder: '(без аутентификации — оставьте пустым)', change: socksPassH.change, input: socksPassH.input });
 
-        /* ── DNS / Debug ─────────────────────────────────────── */
+        /* ── DNS / Debug / Provider ──────────────────────────── */
         var dnsH = makeDebounced('dns');
         var dnsInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.dns, placeholder: '1.1.1.1:53', change: dnsH.change, input: dnsH.input });
+
+        var authTokenH = makeDebounced('auth_token');
+        var authTokenInput = E('input', { class: 'cbi-input-text', type: 'password', value: cfg.auth_token, placeholder: '(пусто = гостевой вход)', change: authTokenH.change, input: authTokenH.input });
+
+        var roomChannelH = makeDebounced('room_channel');
+        var roomChannelInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.room_channel, placeholder: '(обычно пусто)', change: roomChannelH.change, input: roomChannelH.input });
 
         var debugCheck = E('input', {
             type: 'checkbox', checked: cfg.debug === '1' ? '' : null,
@@ -986,25 +1016,25 @@ return view.extend({
         });
 
         /* ── Параметры транспортов ───────────────────────────── */
-        var vp8FpsInput   = numInput('vp8_fps',   cfg.vp8_fps,   '25', 1, 120);
-        var vp8BatchInput = numInput('vp8_batch', cfg.vp8_batch, '1',  1, null);
+        var vp8FpsInput   = numInput('vp8_fps',   cfg.vp8_fps,   '30', 1, 120);
+        var vp8BatchInput = numInput('vp8_batch', cfg.vp8_batch, '64', 1, null);
         var vp8Section = E('div', {}, [
-            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'VP8 Channel — рекомендуется -vp8-fps 60 -vp8-batch 64'),
-            rowV('-vp8-fps',   'FPS VP8-потока. Рекомендуется: 60. По умолчанию: 25.',  vp8FpsInput),
-            rowV('-vp8-batch', 'Кадров за тик. Рекомендуется: 64. По умолчанию: 1.',    vp8BatchInput)
+            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'VP8 Channel — рекомендуется fps 30, batch_size 64'),
+            rowV('vp8.fps',       'FPS VP8-потока. Рекомендуется: 30. По умолчанию: 30.',   vp8FpsInput),
+            rowV('vp8.batch_size','Кадров за тик. Рекомендуется: 64. По умолчанию: 64.',    vp8BatchInput)
         ]);
         self._vp8Section = vp8Section;
 
-        var seiFpsInput   = numInput('sei_fps',   cfg.sei_fps,   '60',   1, 120);
+        var seiFpsInput   = numInput('sei_fps',   cfg.sei_fps,   '30',   1, 120);
         var seiBatchInput = numInput('sei_batch', cfg.sei_batch, '64',   1, null);
         var seiFragInput  = numInput('sei_frag',  cfg.sei_frag,  '900',  1, null);
         var seiAckInput   = numInput('sei_ack_ms', cfg.sei_ack_ms, '2000', 1, null);
         var seiSection = E('div', {}, [
-            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'SEI Channel — рекомендуется -fps 60 -batch 64 -frag 900 -ack-ms 2000'),
-            rowV('-fps',    'FPS H264-потока. Рекомендуется: 60.',           seiFpsInput),
-            rowV('-batch',  'Кадров за тик. Рекомендуется: 64.',             seiBatchInput),
-            rowV('-frag',   'Размер фрагмента в байтах. Рекомендуется: 900.',seiFragInput),
-            rowV('-ack-ms', 'Таймаут ACK в мс. Рекомендуется: 2000.',        seiAckInput)
+            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'SEI Channel — рекомендуется fps 30, batch 64, frag 900, ack-ms 2000'),
+            rowV('sei.fps',          'FPS H264-потока. Рекомендуется: 30.',           seiFpsInput),
+            rowV('sei.batch_size',   'Кадров за тик. Рекомендуется: 64.',             seiBatchInput),
+            rowV('sei.fragment_size','Размер фрагмента в байтах. Рекомендуется: 900.',seiFragInput),
+            rowV('sei.ack_timeout_ms','Таймаут ACK в мс. Рекомендуется: 2000.',       seiAckInput)
         ]);
         self._seiSection = seiSection;
 
@@ -1012,11 +1042,11 @@ return view.extend({
             E('option', { value: 'qrcode', selected: cfg.video_codec === 'qrcode' ? '' : null }, 'qrcode (рекомендуется)'),
             E('option', { value: 'tile',   selected: cfg.video_codec === 'tile'   ? '' : null }, 'tile (требует 1080×1080)')
         ]);
-        var videoWInput       = numInput('video_w',   cfg.video_w,   '1920', 1, null);
+        var videoWInput       = numInput('video_w',   cfg.video_w,   '1080', 1, null);
         var videoHInput       = numInput('video_h',   cfg.video_h,   '1080', 1, null);
         var videoFpsInput     = numInput('video_fps', cfg.video_fps, '30',   1, 120);
         var bitrateH          = makeDebounced('video_bitrate');
-        var videoBitrateInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.video_bitrate, placeholder: '2M', change: bitrateH.change, input: bitrateH.input });
+        var videoBitrateInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.video_bitrate, placeholder: '5000k', change: bitrateH.change, input: bitrateH.input });
         var videoHwSel        = E('select', { class: 'cbi-input-select', change: function (ev) { self._saveField('video_hw', ev.target.value); } }, [
             E('option', { value: 'none',  selected: cfg.video_hw === 'none'  ? '' : null }, 'none'),
             E('option', { value: 'nvenc', selected: cfg.video_hw === 'nvenc' ? '' : null }, 'nvenc (NVIDIA GPU)')
@@ -1033,23 +1063,23 @@ return view.extend({
         var ffmpegH         = makeDebounced('ffmpeg');
         var ffmpegInput     = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.ffmpeg, placeholder: 'ffmpeg', change: ffmpegH.change, input: ffmpegH.input });
 
-        var qrRecoveryRow = rowV('-video-qr-recovery', 'Коррекция ошибок QR. (только qrcode)', qrRecoverySel);
-        var qrSizeRow     = rowV('-video-qr-size',     'Размер фрагмента QR, 0=авто. (только qrcode)', qrSizeInput);
-        var tileModuleRow = rowV('-video-tile-module', 'Размер тайла 1..270 пикс. Требует 1080×1080. (только tile)', tileModuleInput);
-        var tileRsRow     = rowV('-video-tile-rs',     'Reed-Solomon паритет % 0..200. (только tile)', tileRsInput);
+        var qrRecoveryRow = rowV('video.qr_recovery', 'Коррекция ошибок QR. (только qrcode)', qrRecoverySel);
+        var qrSizeRow     = rowV('video.qr_size',     'Размер фрагмента QR, 0=авто. (только qrcode)', qrSizeInput);
+        var tileModuleRow = rowV('video.tile_module', 'Размер тайла 1..270 пикс. Требует 1080×1080. (только tile)', tileModuleInput);
+        var tileRsRow     = rowV('video.tile_rs',     'Reed-Solomon паритет % 0..200. (только tile)', tileRsInput);
         self._qrRows   = [qrRecoveryRow, qrSizeRow];
         self._tileRows = [tileModuleRow, tileRsRow];
 
         var videoSection = E('div', {}, [
-            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'Video Channel — рекомендуется qrcode 1080×1080 60fps 5000k'),
-            rowV('-video-codec',   'Кодек передачи. qrcode — рекомендуется. tile — строго 1080×1080.',   videoCodecSel),
-            rowV('-video-w',       'Ширина кадра в пикс. Для tile — строго 1080.',                       videoWInput),
-            rowV('-video-h',       'Высота кадра в пикс. Для tile — строго 1080.',                       videoHInput),
-            rowV('-video-fps',     'FPS. Рекомендуется: 60. По умолчанию: 30.',                           videoFpsInput),
-            rowV('-video-bitrate', 'Битрейт: 2M или 5000k. Рекомендуется: 5000k.',                       videoBitrateInput),
-            rowV('-video-hw',      'Аппаратное ускорение. По умолчанию: none.',                           videoHwSel),
+            E('div', { style: 'margin-bottom:8px;padding:4px 0;font-size:0.8em;color:#9a7fc0;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(138,92,246,0.15);' }, 'Video Channel — рекомендуется qrcode 1080×1080 30fps 5000k'),
+            rowV('video.codec',   'Кодек передачи. qrcode — рекомендуется. tile — строго 1080×1080.',   videoCodecSel),
+            rowV('video.width',   'Ширина кадра в пикс. Для tile — строго 1080.',                        videoWInput),
+            rowV('video.height',  'Высота кадра в пикс. Для tile — строго 1080.',                        videoHInput),
+            rowV('video.fps',     'FPS. Рекомендуется: 30. По умолчанию: 30.',                          videoFpsInput),
+            rowV('video.bitrate', 'Битрейт: 2M или 5000k. Рекомендуется: 5000k.',                        videoBitrateInput),
+            rowV('video.hw',      'Аппаратное ускорение. По умолчанию: none.',                           videoHwSel),
             qrRecoveryRow, qrSizeRow, tileModuleRow, tileRsRow,
-            rowV('-ffmpeg', 'Путь к ffmpeg. По умолчанию: ffmpeg (из PATH).', ffmpegInput)
+            rowV('ffmpeg', 'Путь к ffmpeg. По умолчанию: ffmpeg (из PATH).', ffmpegInput)
         ]);
         self._videoSection = videoSection;
 
@@ -1067,6 +1097,36 @@ return view.extend({
 
         self._updateTransportSections(cfg.transport);
         self._updateVideoCodecRows(cfg.video_codec);
+
+        /* ── Надёжность и лимиты ────────────────────────────── */
+        var livenessIntervalH = makeDebounced('liveness_interval');
+        var livenessIntervalInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.liveness_interval, placeholder: '10s', change: livenessIntervalH.change, input: livenessIntervalH.input });
+
+        var livenessTimeoutH = makeDebounced('liveness_timeout');
+        var livenessTimeoutInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.liveness_timeout, placeholder: '5s', change: livenessTimeoutH.change, input: livenessTimeoutH.input });
+
+        var livenessFailuresInput = numInput('liveness_failures', cfg.liveness_failures, '3', 1, null);
+
+        var lifecycleH = makeDebounced('lifecycle_max_session_duration');
+        var lifecycleInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.lifecycle_max_session_duration, placeholder: '6h (пусто = выключено)', change: lifecycleH.change, input: lifecycleH.input });
+
+        var trafficPayloadInput = numInput('traffic_max_payload_size', cfg.traffic_max_payload_size, '0', 0, null);
+
+        var trafficMinH = makeDebounced('traffic_min_delay');
+        var trafficMinInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.traffic_min_delay, placeholder: '5ms', change: trafficMinH.change, input: trafficMinH.input });
+
+        var trafficMaxH = makeDebounced('traffic_max_delay');
+        var trafficMaxInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.traffic_max_delay, placeholder: '30ms', change: trafficMaxH.change, input: trafficMaxH.input });
+
+        var reliabilityCard = card('Надёжность и лимиты (опционально)', [
+            rowV('liveness.interval',  'Пинг контрольного потока. По умолчанию: 10s.', livenessIntervalInput),
+            rowV('liveness.timeout',   'Ожидание ответа на ping. По умолчанию: 5s.',   livenessTimeoutInput),
+            rowV('liveness.failures',  'Пропущенных pong до переподключения. По умолчанию: 3.', livenessFailuresInput),
+            rowV('lifecycle.max_session_duration', 'Плановая переподключение сессии, напр. 6h. Пусто = выключено.', lifecycleInput),
+            rowV('traffic.max_payload_size', 'Лимит полезной нагрузки (0 = лимит транспорта).', trafficPayloadInput),
+            rowV('traffic.min_delay',  'Необязательная задержка перед отправкой, напр. 5ms.', trafficMinInput),
+            rowV('traffic.max_delay',  'Верхняя граница задержки, напр. 30ms.', trafficMaxInput)
+        ]);
 
         /* ── URI / Подписки ─────────────────────────────────── */
         var uriLabel = E('span', { style: 'margin-left:10px;font-size:0.85em;vertical-align:middle;' }, '');
@@ -1104,12 +1164,11 @@ return view.extend({
                 carrierSel.value    = p.carrier;
                 transportSel.value  = p.transport;
                 roomInput.value     = p.room_id;
-                clientInput.value   = p.client_id;
                 keyInput.value      = p.key;
                 self._updateTransportOptions(p.carrier);
                 updateMatrix(p.carrier, p.transport);
 
-                var uciVals = { carrier: p.carrier, transport: p.transport, room_id: p.room_id, client_id: p.client_id, key: p.key };
+                var uciVals = { carrier: p.carrier, transport: p.transport, room_id: p.room_id, key: p.key };
                 var tp = p.transportParams || {};
                 Object.keys(tp).forEach(function (k) {
                     uciVals[k] = tp[k];
@@ -1135,34 +1194,36 @@ return view.extend({
             E('div', { style: 'margin-bottom:4px;' }, [uriInput, uriLabel]),
             E('div', { style: 'font-size:0.82em;color:#7a5f99;margin-bottom:12px;' },
                 'Вставьте olcrtc://… — параметры заполнятся автоматически. ' +
-                'Или https:// ссылку на подписку в формате sub.md — добавится новый блок.'),
-            subsContainer
+                'Для Jitsi Room ID — это URL вида https://host/room. ' +
+                'Или https:// ссылку на подписку в формате sub.md — добавится новый блок.')
         ]);
 
         /* ── Карточки ─────────────────────────────────────────── */
         var matrixCard = card('Совместимость', [
-            E('div', { style: 'overflow-x:auto;' }, [matrixTable])
+            E('div', { style: 'overflow-x:auto;' }, [matrixTable]),
+            matrixLegend
         ]);
 
         var settingsCard = card('Базовые настройки подключения', [
-            row('Сервис',    'Через какой сервис идёт туннель.', carrierSel),
+            row('Сервис',    'Через какой сервис идёт туннель. Рекомендуется Jitsi + datachannel.', carrierSel),
             row('Транспорт', 'Протокол передачи данных внутри туннеля.', transportSel),
             E('hr', { style: HR_STYLE }),
-            row('Room ID',         'ID комнаты с сервера.', roomInput),
-            row('Client ID',       'Идентификатор, должен совпадать с сервером.', clientInput),
+            row('Room ID',         'Для Jitsi — URL комнаты; для Telemost/WBStream — ID с сервера.', roomInput),
             row('Ключ шифрования', 'HEX-строка 64 символа. openssl rand -hex 32.', keyInput)
         ]);
 
         var socksCard = card('SOCKS5 прокси', [
-            rowV('Адрес (-socks-host)',  '0.0.0.0 — все интерфейсы. 127.0.0.1 — только локально.', socksHostInput),
-            rowV('Порт (-socks-port)',   'Локальный порт прокси. По умолчанию: 1080.',              socksPortInput),
-            rowV('Логин (-socks-user)',  'RFC 1929. Пусто = без аутентификации.',                   socksUserInput),
-            rowV('Пароль (-socks-pass)', 'Используется вместе с логином.',                          socksPassInput)
+            rowV('Адрес (socks.host)',  '127.0.0.1 — только локально. Для сети нужен логин+пароль.', socksHostInput),
+            rowV('Порт (socks.port)',   'Локальный порт прокси. По умолчанию: 1080.',                 socksPortInput),
+            rowV('Логин (socks.user)',  'RFC 1929. Пусто = без аутентификации.',                      socksUserInput),
+            rowV('Пароль (socks.pass)', 'Используется вместе с логином. Обязателен при не-loopback адресе.', socksPassInput)
         ]);
 
         var advancedCard = card('Дополнительно', [
-            rowV('DNS-сервер (-dns)',       'DNS для резолвинга в туннеле. По умолчанию: 1.1.1.1:53.', dnsInput),
-            rowV('Режим отладки (--debug)', 'Подробные логи WebRTC-соединений.',
+            rowV('DNS-сервер (net.dns)', 'DNS для резолвинга в туннеле. По умолчанию: 1.1.1.1:53.', dnsInput),
+            rowV('Auth Token (auth.token)', 'Токен аккаунта/модератора WBStream. Пусто = гость. Нужен для datachannel через WBStream.', authTokenInput),
+            rowV('Room Channel (room.channel)', 'Необязательный канал для peer-routing. Обычно пусто.', roomChannelInput),
+            rowV('Режим отладки (debug)', 'Подробные логи WebRTC-соединений.',
                 E('label', { style: 'display:flex;align-items:center;cursor:pointer;' }, [debugCheck, E('span', {}, 'Включить подробное логирование')]))
         ]);
 
@@ -1225,18 +1286,21 @@ return view.extend({
                 col(2, advancedCard)
             ]),
 
-            /* Строка 4: Логи на всю ширину */
+            /* Строка 4: Надёжность и лимиты */
+            reliabilityCard,
+
+            /* Строка 5: Логи на всю ширину */
             logsCard,
 
             /* Подвал */
             E('div', { style: 'text-align:center;margin-top:20px;padding-top:16px;' +
                               'border-top:1px solid rgba(138,92,246,0.15);font-size:0.78em;color:#6b5280;' }, [
-                'Страница проекта — ',
+                'Обновлённая панель по актуальным докам olcrtc. Проект — ',
                 E('a', {
                     href   : 'https://github.com/tankionline2005/OlcRTC-OpenWRT',
                     target : '_blank',
                     style  : 'color:#8a5cf6;text-decoration:none;'
-                }, 'https://github.com/tankionline2005/OlcRTC-OpenWRT')
+                }, 'OlcRTC-OpenWRT')
             ])
         ]);
     },
