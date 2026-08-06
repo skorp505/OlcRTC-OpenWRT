@@ -1297,7 +1297,7 @@ return view.extend({
                               'border-top:1px solid rgba(138,92,246,0.15);font-size:0.78em;color:#6b5280;' }, [
                 'Обновлённая панель по актуальным докам olcrtc. Проект — ',
                 E('a', {
-                    href   : 'https://github.com/tankionline2005/OlcRTC-OpenWRT',
+                    href   : 'https://github.com/skorp505/OlcRTC-OpenWRT',
                     target : '_blank',
                     style  : 'color:#8a5cf6;text-decoration:none;'
                 }, 'OlcRTC-OpenWRT')

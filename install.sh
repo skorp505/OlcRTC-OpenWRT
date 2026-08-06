@@ -1,14 +1,14 @@
 #!/bin/sh
 # =============================================================================
 # Установочный скрипт OlcRTC-OpenWRT
-# Проект: https://github.com/tankionline2005/OlcRTC-OpenWRT
+# Проект: https://github.com/skorp505/OlcRTC-OpenWRT
 # Основан на OlcRTC: https://github.com/openlibrecommunity/olcrtc
 #   автора zarazaex / openlibrecommunity
 # =============================================================================
 
 set -e
 
-REPO_RAW="https://raw.githubusercontent.com/tankionline2005/OlcRTC-OpenWRT/main"
+REPO_RAW="https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main"
 BINARY_ARM64_URL="${REPO_RAW}/olcrtc-linux-arm64"
 BINARY_AMD64_URL="${REPO_RAW}/olcrtc-linux-amd64"
 BINARY_DST="/usr/bin/olcrtc"

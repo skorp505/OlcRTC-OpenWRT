@@ -64,7 +64,7 @@ OlcRTC запускается на роутере как SOCKS5-прокси.
 Подключитесь к роутеру по SSH и выполните:
 
 ```sh
-sh -c "$(wget -qO- https://raw.githubusercontent.com/tankionline2005/OlcRTC-OpenWRT/main/install.sh)"
+sh -c "$(wget -qO- https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main/install.sh)"
 ```
 
 Скрипт спросит архитектуру устройства и скачает только нужный бинарник, а также data-файлы (`names`, `surnames`) в `/etc/olcrtc/data`.  
@@ -124,7 +124,7 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/tankionline2005/OlcRTC-Open
 ## Удаление
 
 ```sh
-sh -c "$(wget -qO- https://raw.githubusercontent.com/tankionline2005/OlcRTC-OpenWRT/main/uninstall.sh)"
+sh -c "$(wget -qO- https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main/uninstall.sh)"
 ```
 
 Или вручную:
