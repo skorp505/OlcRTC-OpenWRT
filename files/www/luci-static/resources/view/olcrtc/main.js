@@ -1351,7 +1351,7 @@ return view.extend({
 
         var debugCheck = E('input', {
             type: 'checkbox', checked: cfg.debug === '1' ? '' : null,
-            style: 'width:auto;margin-right:6px;',
+            style: 'width:16px;height:16px;margin:0 10px 0 2px;flex:0 0 auto;accent-color:#3b82f6;',
             change: function (ev) { self._saveField('debug', ev.target.checked ? '1' : '0'); }
         });
 
@@ -1650,7 +1650,7 @@ return view.extend({
             rowV('Auth Token (auth.token)', 'Токен аккаунта/модератора WBStream. Пусто = гость. Нужен для datachannel через WBStream.', authTokenInput),
             rowV('Room Channel (room.channel)', 'Необязательный канал для peer-routing. Обычно пусто.', roomChannelInput),
             rowV('Режим отладки (debug)', 'Подробные логи WebRTC-соединений.',
-                E('label', { style: 'display:flex;align-items:center;cursor:pointer;' }, [debugCheck, E('span', {}, 'Включить логирование')]))
+                E('label', { style: 'display:flex;align-items:center;gap:6px;padding-left:2px;cursor:pointer;' }, [debugCheck, E('span', {}, 'Включить логирование')]))
         ]);
         advancedCard.style.flex = '1';
         advancedCard.style.marginTop = '16px';
