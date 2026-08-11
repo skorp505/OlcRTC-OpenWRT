@@ -1588,12 +1588,21 @@ return view.extend({
                    'border-radius:6px;font-size:0.72em;white-space:pre-wrap;word-break:break-all;' +
                    'max-height:260px;overflow-y:auto;border:1px solid rgba(138,92,246,0.2);'
         }, '');
+        var cfgPreviewShown = false;
         var cfgPreviewBtn = E('button', {
             class : 'btn cbi-button cbi-button-apply',
             style : 'font-size:0.8em;padding:4px 12px;',
             click : function () {
+                if (cfgPreviewShown) {
+                    cfgPreviewShown = false;
+                    cfgPreview.style.display = 'none';
+                    cfgPreviewBtn.textContent = 'Показать текущий client.yaml';
+                    return Promise.resolve();
+                }
+                cfgPreviewShown = true;
                 cfgPreview.style.display = '';
                 cfgPreview.textContent = 'Загрузка...';
+                cfgPreviewBtn.textContent = 'Скрыть текущий client.yaml';
                 return callExec('/bin/cat', ['/etc/olcrtc/client.yaml'], null)
                     .then(function (res) {
                         cfgPreview.textContent = res || '(файл пуст — запустите сервис)';
