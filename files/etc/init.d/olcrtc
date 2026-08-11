@@ -30,6 +30,8 @@ is_loopback() {
 write_config() {
     local carrier transport room_id key auth_token room_channel
     local socks_host socks_port socks_user socks_pass dns debug
+    local socks_proxy_addr socks_proxy_port socks_proxy_user socks_proxy_pass
+    local engine_name engine_url engine_token
     local vp8_fps vp8_batch
     local sei_fps sei_batch sei_frag sei_ack_ms
     local video_codec video_w video_h video_fps video_bitrate video_hw
@@ -49,6 +51,13 @@ write_config() {
     config_get socks_port       config socks_port       '1080'
     config_get socks_user       config socks_user       ''
     config_get socks_pass       config socks_pass       ''
+    config_get socks_proxy_addr config socks_proxy_addr ''
+    config_get socks_proxy_port config socks_proxy_port '0'
+    config_get socks_proxy_user config socks_proxy_user ''
+    config_get socks_proxy_pass config socks_proxy_pass ''
+    config_get engine_name      config engine_name      'livekit'
+    config_get engine_url       config engine_url       ''
+    config_get engine_token     config engine_token     ''
     config_get dns              config dns              '1.1.1.1:53'
     config_get debug            config debug            '0'
     config_get vp8_fps          config vp8_fps          '30'
@@ -78,6 +87,9 @@ write_config() {
     case "$socks_port" in
         ''|*[!0-9]*|0) socks_port=1080 ;;
     esac
+    case "$socks_proxy_port" in
+        ''|*[!0-9]*) socks_proxy_port=0 ;;
+    esac
 
     mkdir -p "$CFG_DIR" "$DATA_DIR"
 
@@ -87,6 +99,12 @@ write_config() {
         echo "auth:"
         echo "  provider: $(yaml_q "$carrier")"
         [ -n "$auth_token" ] && echo "  token: $(yaml_q "$auth_token")"
+        if [ "$carrier" = "none" ]; then
+            echo "engine:"
+            echo "  name: $(yaml_q "$engine_name")"
+            [ -n "$engine_url" ]   && echo "  url: $(yaml_q "$engine_url")"
+            [ -n "$engine_token" ] && echo "  token: $(yaml_q "$engine_token")"
+        fi
         echo "room:"
         echo "  id: $(yaml_q "$room_id")"
         [ -n "$room_channel" ] && echo "  channel: $(yaml_q "$room_channel")"
@@ -100,6 +118,12 @@ write_config() {
         echo "  port: $socks_port"
         [ -n "$socks_user" ] && echo "  user: $(yaml_q "$socks_user")"
         [ -n "$socks_pass" ] && echo "  pass: $(yaml_q "$socks_pass")"
+        if [ -n "$socks_proxy_addr" ]; then
+            echo "  proxy_addr: $(yaml_q "$socks_proxy_addr")"
+            echo "  proxy_port: $socks_proxy_port"
+            [ -n "$socks_proxy_user" ] && echo "  proxy_user: $(yaml_q "$socks_proxy_user")"
+            [ -n "$socks_proxy_pass" ] && echo "  proxy_pass: $(yaml_q "$socks_proxy_pass")"
+        fi
         echo "data: $DATA_DIR"
         if [ "$debug" = "1" ]; then
             echo "debug: true"
