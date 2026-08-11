@@ -1646,10 +1646,10 @@ return view.extend({
         ]);
 
         var advancedCard = card('Дополнительно', [
-            row('DNS-сервер (net.dns)', 'DNS для резолвинга в туннеле. По умолчанию: 1.1.1.1:53.', dnsInput),
-            row('Auth Token (auth.token)', 'Токен аккаунта/модератора WBStream. Пусто = гость. Нужен для datachannel через WBStream.', authTokenInput),
-            row('Room Channel (room.channel)', 'Необязательный канал для peer-routing. Обычно пусто.', roomChannelInput),
-            row('Режим отладки (debug)', 'Подробные логи WebRTC-соединений.',
+            rowV('DNS-сервер (net.dns)', 'DNS для резолвинга в туннеле. По умолчанию: 1.1.1.1:53.', dnsInput),
+            rowV('Auth Token (auth.token)', 'Токен аккаунта/модератора WBStream. Пусто = гость. Нужен для datachannel через WBStream.', authTokenInput),
+            rowV('Room Channel (room.channel)', 'Необязательный канал для peer-routing. Обычно пусто.', roomChannelInput),
+            rowV('Режим отладки (debug)', 'Подробные логи WebRTC-соединений.',
                 E('label', { style: 'display:flex;align-items:center;cursor:pointer;' }, [debugCheck, E('span', {}, 'Включить логирование')]))
         ]);
         advancedCard.style.flex = '1';
