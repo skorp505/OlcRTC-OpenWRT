@@ -469,6 +469,7 @@ return view.extend({
     _badgeEl             : null,
     _statusMetaEl        : null,
     _logsEl              : null,
+    _logsCleared         : false,
     _startBtn            : null,
     _stopBtn             : null,
     _transportSel        : null,
@@ -553,6 +554,7 @@ return view.extend({
 
         if (self._logsTimer) clearInterval(self._logsTimer);
         self._logsTimer = setInterval(function () {
+            if (self._logsCleared) return;
             getLogs().then(function (text) {
                 if (!self._logsEl) return;
                 var el = self._logsEl;
@@ -1123,12 +1125,26 @@ return view.extend({
         }, 'Загрузка логов...');
         self._logsEl = logsEl;
 
+        /* Кнопка очистки логов — на уровне подзаголовка, справа */
+        var logsClearBtn = E('button', {
+            class : 'btn cbi-button cbi-button-reset',
+            style : 'font-size:0.72em;padding:2px 10px;white-space:nowrap;',
+            click : function () {
+                self._logsCleared = true;
+                logsEl.textContent = '';
+                self._toast('Логи очищены');
+            }
+        }, 'Очистить логи');
+
         var statusSection = card('Статус', [
             E('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;' },
                 [badgeEl, statusMetaEl]),
             activeProfileLabel,
             E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn]),
-            E('div', { class: 'olcrtc-subhead', style: 'margin:0 0 6px;' }, 'Логи'),
+            E('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;' }, [
+                E('div', { class: 'olcrtc-subhead', style: 'margin:0;' }, 'Логи'),
+                logsClearBtn
+            ]),
             logsEl
         ]);
 
