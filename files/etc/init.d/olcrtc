@@ -33,7 +33,7 @@ write_config() {
     local vp8_fps vp8_batch
     local sei_fps sei_batch sei_frag sei_ack_ms
     local video_codec video_w video_h video_fps video_bitrate video_hw
-    local video_qr_recovery video_qr_size video_tile_module video_tile_rs ffmpeg_bin
+    local video_qr_recovery video_qr_size video_tile_module video_tile_rs
     local liveness_interval liveness_timeout liveness_failures
     local lifecycle_max_session_duration traffic_max_payload_size
     local traffic_min_delay traffic_max_delay
@@ -67,7 +67,6 @@ write_config() {
     config_get video_qr_size    config video_qr_size    '0'
     config_get video_tile_module config video_tile_module '4'
     config_get video_tile_rs    config video_tile_rs    '20'
-    config_get ffmpeg_bin       config ffmpeg           'ffmpeg'
     config_get liveness_interval config liveness_interval '10s'
     config_get liveness_timeout  config liveness_timeout  '5s'
     config_get liveness_failures config liveness_failures '3'
@@ -133,7 +132,6 @@ write_config() {
                 echo "  qr_size: $video_qr_size"
                 echo "  tile_module: $video_tile_module"
                 echo "  tile_rs: $video_tile_rs"
-                echo "ffmpeg: $(yaml_q "$ffmpeg_bin")"
                 ;;
         esac
 

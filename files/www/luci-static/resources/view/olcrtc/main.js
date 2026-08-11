@@ -777,7 +777,6 @@ return view.extend({
             video_qr_size    : uci.get('olcrtc', 'config', 'video_qr_size')     || '0',
             video_tile_module: uci.get('olcrtc', 'config', 'video_tile_module') || '4',
             video_tile_rs    : uci.get('olcrtc', 'config', 'video_tile_rs')     || '20',
-            ffmpeg           : uci.get('olcrtc', 'config', 'ffmpeg')            || 'ffmpeg',
             liveness_interval: uci.get('olcrtc', 'config', 'liveness_interval') || '10s',
             liveness_timeout : uci.get('olcrtc', 'config', 'liveness_timeout')  || '5s',
             liveness_failures: uci.get('olcrtc', 'config', 'liveness_failures') || '3',
@@ -1060,8 +1059,6 @@ return view.extend({
         var qrSizeInput     = numInput('video_qr_size',     cfg.video_qr_size,    '0',  0, null);
         var tileModuleInput = numInput('video_tile_module', cfg.video_tile_module, '4',  1, 270);
         var tileRsInput     = numInput('video_tile_rs',     cfg.video_tile_rs,    '20', 0, 200);
-        var ffmpegH         = makeDebounced('ffmpeg');
-        var ffmpegInput     = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.ffmpeg, placeholder: 'ffmpeg', change: ffmpegH.change, input: ffmpegH.input });
 
         var qrRecoveryRow = rowV('video.qr_recovery', 'Коррекция ошибок QR. (только qrcode)', qrRecoverySel);
         var qrSizeRow     = rowV('video.qr_size',     'Размер фрагмента QR, 0=авто. (только qrcode)', qrSizeInput);
@@ -1078,8 +1075,7 @@ return view.extend({
             rowV('video.fps',     'FPS. Рекомендуется: 30. По умолчанию: 30.',                          videoFpsInput),
             rowV('video.bitrate', 'Битрейт: 2M или 5000k. Рекомендуется: 5000k.',                        videoBitrateInput),
             rowV('video.hw',      'Аппаратное ускорение. По умолчанию: none.',                           videoHwSel),
-            qrRecoveryRow, qrSizeRow, tileModuleRow, tileRsRow,
-            rowV('ffmpeg', 'Путь к ffmpeg. По умолчанию: ffmpeg (из PATH).', ffmpegInput)
+            qrRecoveryRow, qrSizeRow, tileModuleRow, tileRsRow
         ]);
         self._videoSection = videoSection;
 
@@ -1089,7 +1085,7 @@ return view.extend({
             video_codec: videoCodecSel, video_w: videoWInput, video_h: videoHInput,
             video_fps: videoFpsInput, video_bitrate: videoBitrateInput, video_hw: videoHwSel,
             video_qr_recovery: qrRecoverySel, video_qr_size: qrSizeInput,
-            video_tile_module: tileModuleInput, video_tile_rs: tileRsInput, ffmpeg: ffmpegInput
+            video_tile_module: tileModuleInput, video_tile_rs: tileRsInput
         };
 
         var datachannelHint = E('div', { style: 'color:#8b949e;font-size:0.9em;padding:8px 0;' }, 'datachannel не имеет дополнительных параметров — всё по умолчанию.');
