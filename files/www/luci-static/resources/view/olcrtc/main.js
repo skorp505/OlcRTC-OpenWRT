@@ -76,7 +76,7 @@ var TRANSPORTS = ['datachannel', 'vp8channel', 'seichannel', 'videochannel'];
 var COMPAT = {
     telemost : { datachannel: 0, vp8channel: 2, seichannel: 0, videochannel: 2 },
     wbstream : { datachannel: 1, vp8channel: 2, seichannel: 2, videochannel: 2 },
-    jitsi    : { datachannel: 2, vp8channel: 1, seichannel: 1, videochannel: 1 },
+    jitsi    : { datachannel: 2, vp8channel: 2, seichannel: 2, videochannel: 2 },
     none     : { datachannel: 1, vp8channel: 1, seichannel: 1, videochannel: 1 }
 };
 
@@ -165,8 +165,6 @@ function parseTransportParams(transport, paramsStr) {
             if (k === 'video-w')           result.video_w           = v;
             if (k === 'video-h')           result.video_h           = v;
             if (k === 'video-fps')         result.video_fps         = v;
-            if (k === 'video-bitrate')     result.video_bitrate     = v;
-            if (k === 'video-hw')          result.video_hw          = v;
             if (k === 'video-qr-recovery') result.video_qr_recovery = v;
             if (k === 'video-qr-size')     result.video_qr_size     = v;
             if (k === 'video-tile-module') result.video_tile_module = v;
@@ -1057,15 +1055,13 @@ return view.extend({
             video_w          : uci.get('olcrtc', 'config', 'video_w')           || '1080',
             video_h          : uci.get('olcrtc', 'config', 'video_h')           || '1080',
             video_fps        : uci.get('olcrtc', 'config', 'video_fps')         || '30',
-            video_bitrate    : uci.get('olcrtc', 'config', 'video_bitrate')     || '2M',
-            video_hw         : uci.get('olcrtc', 'config', 'video_hw')          || 'none',
             video_qr_recovery: uci.get('olcrtc', 'config', 'video_qr_recovery') || 'low',
             video_qr_size    : uci.get('olcrtc', 'config', 'video_qr_size')     || '0',
             video_tile_module: uci.get('olcrtc', 'config', 'video_tile_module') || '4',
-            video_tile_rs    : uci.get('olcrtc', 'config', 'video_tile_rs')     || '20',
+            video_tile_rs    : uci.get('olcrtc', 'config', 'video_tile_rs')     || '0',
             liveness_interval: uci.get('olcrtc', 'config', 'liveness_interval') || '10s',
-            liveness_timeout : uci.get('olcrtc', 'config', 'liveness_timeout')  || '5s',
-            liveness_failures: uci.get('olcrtc', 'config', 'liveness_failures') || '3',
+            liveness_timeout : uci.get('olcrtc', 'config', 'liveness_timeout')  || '15s',
+            liveness_failures: uci.get('olcrtc', 'config', 'liveness_failures') || '4',
             lifecycle_max_session_duration : uci.get('olcrtc', 'config', 'lifecycle_max_session_duration') || '',
             traffic_max_payload_size : uci.get('olcrtc', 'config', 'traffic_max_payload_size') || '0',
             traffic_min_delay : uci.get('olcrtc', 'config', 'traffic_min_delay') || '',
@@ -1428,12 +1424,6 @@ return view.extend({
         var videoWInput       = numInput('video_w',   cfg.video_w,   '1080', 1, null);
         var videoHInput       = numInput('video_h',   cfg.video_h,   '1080', 1, null);
         var videoFpsInput     = numInput('video_fps', cfg.video_fps, '30',   1, 120);
-        var bitrateH          = makeDebounced('video_bitrate');
-        var videoBitrateInput = E('input', { class: 'cbi-input-text', type: 'text', value: cfg.video_bitrate, placeholder: '5000k', style: COMPACT_INPUT, change: bitrateH.change, input: bitrateH.input });
-        var videoHwSel        = E('select', { class: 'cbi-input-select', change: function (ev) { self._saveField('video_hw', ev.target.value); } }, [
-            E('option', { value: 'none',  selected: cfg.video_hw === 'none'  ? '' : null }, 'none'),
-            E('option', { value: 'nvenc', selected: cfg.video_hw === 'nvenc' ? '' : null }, 'nvenc (NVIDIA GPU)')
-        ]);
         var qrRecoverySel = E('select', { class: 'cbi-input-select', change: function (ev) { self._saveField('video_qr_recovery', ev.target.value); } }, [
             E('option', { value: 'low',     selected: cfg.video_qr_recovery === 'low'     ? '' : null }, 'low'),
             E('option', { value: 'medium',  selected: cfg.video_qr_recovery === 'medium'  ? '' : null }, 'medium'),
@@ -1442,7 +1432,7 @@ return view.extend({
         ]);
         var qrSizeInput     = numInput('video_qr_size',     cfg.video_qr_size,    '0',  0, null);
         var tileModuleInput = numInput('video_tile_module', cfg.video_tile_module, '4',  1, 270);
-        var tileRsInput     = numInput('video_tile_rs',     cfg.video_tile_rs,    '20', 0, 200);
+        var tileRsInput     = numInput('video_tile_rs',     cfg.video_tile_rs,    '0', 0, 200);
 
         var qrRecoveryRow = cell('video.qr_recovery', qrRecoverySel);
         var qrSizeRow     = cell('video.qr_size',     qrSizeInput);
@@ -1452,14 +1442,12 @@ return view.extend({
         self._tileRows = [tileModuleRow, tileRsRow];
 
         var videoSection = E('div', {}, [
-            sectionHead('Video Channel · qrcode 1080×1080 30fps'),
+            sectionHead('Video Channel'),
             grid2([
                 cell('video.codec',   videoCodecSel),
-                cell('video.hw',      videoHwSel),
                 cell('video.width',   videoWInput),
                 cell('video.height',  videoHInput),
                 cell('video.fps',     videoFpsInput),
-                cell('video.bitrate', videoBitrateInput),
                 qrRecoveryRow, qrSizeRow, tileModuleRow, tileRsRow
             ])
         ]);
@@ -1469,7 +1457,7 @@ return view.extend({
             vp8_fps: vp8FpsInput, vp8_batch: vp8BatchInput,
             sei_fps: seiFpsInput, sei_batch: seiBatchInput, sei_frag: seiFragInput, sei_ack_ms: seiAckInput,
             video_codec: videoCodecSel, video_w: videoWInput, video_h: videoHInput,
-            video_fps: videoFpsInput, video_bitrate: videoBitrateInput, video_hw: videoHwSel,
+            video_fps: videoFpsInput,
             video_qr_recovery: qrRecoverySel, video_qr_size: qrSizeInput,
             video_tile_module: tileModuleInput, video_tile_rs: tileRsInput
         };

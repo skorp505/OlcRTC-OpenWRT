@@ -34,7 +34,7 @@ write_config() {
     local engine_name engine_url engine_token
     local vp8_fps vp8_batch
     local sei_fps sei_batch sei_frag sei_ack_ms
-    local video_codec video_w video_h video_fps video_bitrate video_hw
+    local video_codec video_w video_h video_fps
     local video_qr_recovery video_qr_size video_tile_module video_tile_rs
     local liveness_interval liveness_timeout liveness_failures
     local lifecycle_max_session_duration traffic_max_payload_size
@@ -70,15 +70,13 @@ write_config() {
     config_get video_w          config video_w          '1080'
     config_get video_h          config video_h          '1080'
     config_get video_fps        config video_fps        '30'
-    config_get video_bitrate    config video_bitrate    '2M'
-    config_get video_hw         config video_hw         'none'
     config_get video_qr_recovery config video_qr_recovery 'low'
     config_get video_qr_size    config video_qr_size    '0'
     config_get video_tile_module config video_tile_module '4'
-    config_get video_tile_rs    config video_tile_rs    '20'
+    config_get video_tile_rs    config video_tile_rs    '0'
     config_get liveness_interval config liveness_interval '10s'
-    config_get liveness_timeout  config liveness_timeout  '5s'
-    config_get liveness_failures config liveness_failures '3'
+    config_get liveness_timeout  config liveness_timeout  '15s'
+    config_get liveness_failures config liveness_failures '4'
     config_get lifecycle_max_session_duration config lifecycle_max_session_duration ''
     config_get traffic_max_payload_size config traffic_max_payload_size '0'
     config_get traffic_min_delay config traffic_min_delay ''
@@ -150,8 +148,6 @@ write_config() {
                 echo "  width: $video_w"
                 echo "  height: $video_h"
                 echo "  fps: $video_fps"
-                echo "  bitrate: $(yaml_q "$video_bitrate")"
-                echo "  hw: $(yaml_q "$video_hw")"
                 echo "  qr_recovery: $(yaml_q "$video_qr_recovery")"
                 echo "  qr_size: $video_qr_size"
                 echo "  tile_module: $video_tile_module"

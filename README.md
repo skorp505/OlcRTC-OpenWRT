@@ -27,7 +27,7 @@ OlcRTC запускается на роутере как SOCKS5-прокси.
 - Выбор сервиса: **Jitsi**, **Telemost**, **Wildberries Stream**
 - Выбор транспорта: **datachannel**, **vp8channel**, **seichannel**, **videochannel**
 - Встроенная матрица совместимости "Сервис × Транспорт" (✓ работает / ~ нестабильно / ✗ не работает)
-- Полная настройка параметров каждого транспорта (`vp8.fps/batch_size`, `sei.fps/batch_size/fragment_size/ack_timeout_ms`, `video.codec/width/height/fps/bitrate/hw` и др.) — секции показываются только для выбранного транспорта
+- Полная настройка параметров каждого транспорта (`vp8.fps/batch_size`, `sei.fps/batch_size/fragment_size/ack_timeout_ms`, `video.codec/width/height/fps` и др.) — секции показываются только для выбранного транспорта
 - Ввод Room ID, ключа шифрования, SOCKS5 хоста/порта/логина/пароля, DNS-сервера
 - Дополнительно: `auth.token` (WBStream), `room.channel`, `liveness`, `lifecycle.max_session_duration`, `traffic`
 - Автосохранение при изменении любого поля — кнопка «Сохранить» не нужна
@@ -40,15 +40,15 @@ OlcRTC запускается на роутере как SOCKS5-прокси.
 | Транспорт | Telemost | WBStream | Jitsi |
 |---|---|---|---|
 | datachannel | ✗ | ~ | ✓ |
-| vp8channel | ✓ | ✓ | ~ |
-| seichannel | ✗ | ✓ | ~ |
-| videochannel | ✓ | ✓ | ~ |
+| vp8channel | ✓ | ✓ | ✓ |
+| seichannel | ✗ | ✓ | ✓ |
+| videochannel | ✓ | ✓ | ✓ |
 
 **Рекомендуемая комбинация: `jitsi + datachannel`.**
 
 - **Telemost** — стабильно только `vp8channel` (DataChannel удалён, seichannel не поддерживается, videochannel медленный).
 - **WBStream** — все транспорты кроме datachannel. Для `datachannel` нужен `auth.token` модератора/аккаунта (`canPublishData=true`); в гостевом флоу он не работает.
-- **Jitsi** — стабильно `datachannel`; видео-транспорты помечены `~`. Подходят self-hosted и публичные инстансы без авторизации.
+- **Jitsi** — все транспорты работают стабильно. Подходят self-hosted и публичные инстансы без авторизации.
 
 ## Требования
 
