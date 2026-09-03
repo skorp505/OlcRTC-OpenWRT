@@ -106,6 +106,14 @@ mkdir -p "$LUCI_VIEW_DIR"
 wget -q -O "$LUCI_VIEW" "${REPO_RAW}/files/www/luci-static/resources/view/olcrtc/main.js" || \
     error "Не удалось скачать JS-вид LuCI"
 
+# ── Файлы панели: версия / скрипт обновления / changelog ──
+info "Устанавливаем служебные файлы панели..."
+mkdir -p "$PANEL_DIR"
+wget -q -O "$PANEL_VERSION_FILE" "$PANEL_VERSION_URL" || warn "Не удалось скачать версию панели"
+wget -q -O "$PANEL_UPDATE_SCRIPT" "$PANEL_UPDATE_URL" || warn "Не удалось скачать скрипт обновления"
+chmod 755 "$PANEL_UPDATE_SCRIPT" 2>/dev/null || true
+wget -q -O "$CHANGELOG_FILE" "$CHANGELOG_URL" || warn "Не удалось скачать CHANGELOG"
+
 # ── Data-директория (names/surnames для olcrtc) ──────────
 info "Устанавливаем data-файлы olcrtc..."
 mkdir -p "$DATA_DIR"

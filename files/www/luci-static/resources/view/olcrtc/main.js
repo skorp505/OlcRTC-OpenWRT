@@ -426,6 +426,7 @@ var ICON_SOCKS   = _OLCRTC_ICON('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 
 var ICON_TRANSPORT = _OLCRTC_ICON('<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>');
 var ICON_RELIABILITY = _OLCRTC_ICON('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>');
 var ICON_EXTRA   = _OLCRTC_ICON('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
+var ICON_UPDATE  = _OLCRTC_ICON('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>');
 
 var _cardIconCounter = 0;
 var CARD_ICONS = {
@@ -436,7 +437,8 @@ var CARD_ICONS = {
     'SOCKS5 прокси': ICON_SOCKS,
     'Параметры транспорта': ICON_TRANSPORT,
     'Надёжность и лимиты (опционально)': ICON_RELIABILITY,
-    'Дополнительно': ICON_EXTRA
+    'Дополнительно': ICON_EXTRA,
+    'Обновление': ICON_UPDATE
 };
 function card(title, nodes, iconSvgMarkup) {
     var inner = Array.isArray(nodes) ? nodes : [nodes];
@@ -1499,6 +1501,147 @@ return view.extend({
             row('traffic.max_delay',   'Верхняя граница задержки, напр. 30ms.', trafficMaxInput)
         ]);
 
+        /* ── Обновление панели ──────────────────────────────── */
+        var UPDATE_RAW_BASE = 'https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main';
+        var PANEL_VERSION_PATH = '/etc/olcrtc/panel-version';
+        var ownVersionEl = E('span', { style: 'color:#e2d9f3;font-weight:600;' }, '…');
+        var updateStatusEl = E('div', { style: 'font-size:0.78em;color:#8b949e;margin-top:6px;' }, 'Нажмите «Проверить обновление».');
+        var updateBtnArea  = E('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;display:none;' }, []);
+
+        self._readVersion = function (path) {
+            return callExec('/bin/cat', [path], null)
+                .then(function (res) { return (res || '').toString().trim(); })
+                .catch(function () { return ''; });
+        };
+
+        self._fetchRemoteVersion = function () {
+            return callExec('/usr/bin/wget', ['-q', '-O', '/tmp/olcrtc-remote-version', '--timeout=20',
+                                              UPDATE_RAW_BASE + '/panel-version'], null)
+                .then(function () { return self._readVersion('/tmp/olcrtc-remote-version'); })
+                .catch(function () { return ''; });
+        };
+
+        function cmpVersion(a, b) {
+            a = (a || '').trim(); b = (b || '').trim();
+            if (a === b) return 0;
+            var pa = a.split('.').map(Number);
+            var pb = b.split('.').map(Number);
+            for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+                var x = pa[i] || 0, y = pb[i] || 0;
+                if (x !== y) return x > y ? 1 : -1;
+            }
+            return 0;
+        }
+
+        var checkBtn = E('button', {
+            class : 'btn cbi-button cbi-button-apply',
+            style : 'font-size:0.8em;padding:4px 12px;',
+            click : ui.createHandlerFn(self, function () {
+                checkBtn.disabled = true;
+                updateStatusEl.textContent = 'Проверяю…';
+                updateBtnArea.style.display = 'none';
+                var cur = self._currentPanelVersion;
+                self._fetchRemoteVersion().then(function (remote) {
+                    if (!remote) {
+                        updateStatusEl.textContent = 'Не удалось получить данные о версии (нет сети?).';
+                        checkBtn.disabled = false;
+                        return;
+                    }
+                    var diff = cmpVersion(remote, cur);
+                    if (diff > 0) {
+                        updateStatusEl.textContent = 'Доступна новая версия: ' + remote +
+                            ' (установлена ' + (cur || '?') + ').';
+                        self._remoteVersion = remote;
+                        buildUpdateActions();
+                    } else if (diff === 0) {
+                        updateStatusEl.textContent = 'Установлена актуальная версия (' + cur + ').';
+                    } else {
+                        updateStatusEl.textContent = 'Установленная версия (' + cur +
+                            ') новее доступной (' + remote + ').';
+                    }
+                    checkBtn.disabled = false;
+                });
+            })
+        }, 'Проверить обновление');
+
+        function buildUpdateActions() {
+            updateBtnArea.innerHTML = '';
+            var ver = self._remoteVersion || '?';
+            var updateBtn = E('button', {
+                class : 'btn cbi-button cbi-button-apply',
+                style : 'font-size:0.8em;padding:4px 12px;',
+                click : ui.createHandlerFn(self, function () {
+                    updateBtn.disabled = true;
+                    updateStatusEl.textContent = 'Обновление… это может занять время.';
+                    callExec('/bin/sh', ['-c', '/etc/olcrtc/update-panel.sh -y'], null)
+                        .then(function (res) {
+                            var m = /VERSION=(\S+)/.exec((res || '').toString());
+                            updateStatusEl.textContent = 'Обновление завершено. Версия: ' +
+                                (m ? m[1] : ver) + '.';
+                            self._currentPanelVersion = m ? m[1] : ver;
+                            ownVersionEl.textContent = self._currentPanelVersion;
+                            updateStatusEl.textContent += ' Обновите страницу.';
+                            updateBtnArea.style.display = 'none';
+                        })
+                        .catch(function (err) {
+                            updateStatusEl.textContent = 'Ошибка обновления: ' + err + '.';
+                            updateBtn.disabled = false;
+                        });
+                })
+            }, 'Обновить');
+
+            var changesBtn = E('button', {
+                class : 'btn cbi-button',
+                style : 'font-size:0.8em;padding:4px 12px;',
+                click : ui.createHandlerFn(self, function () {
+                    callExec('/usr/bin/wget', ['-q', '-O', '/tmp/olcrtc-changes', '--timeout=20',
+                                               UPDATE_RAW_BASE + '/CHANGELOG.md'], null)
+                        .then(function () { return self._readVersion('/tmp/olcrtc-changes'); })
+                        .then(function (md) {
+                            showChanges(md || 'Нет описания изменений.');
+                        });
+                })
+            }, 'Изменения в новой версии');
+
+            updateBtnArea.appendChild(updateBtn);
+            updateBtnArea.appendChild(changesBtn);
+            updateBtnArea.style.display = 'flex';
+        }
+
+        function showChanges(text) {
+            var pre = E('pre', {
+                style : 'white-space:pre-wrap;word-break:break-word;font-family:monospace;' +
+                        'font-size:0.78em;background:#0a0518;color:#d6c6ff;padding:12px;' +
+                        'border:1px solid rgba(138,92,246,0.25);border-radius:8px;' +
+                        'max-height:320px;overflow-y:auto;margin:0;'
+            }, text);
+            var box = E('div', {
+                style : 'margin-top:10px;',
+                class : 'olcrtc-changesbox'
+            }, [pre]);
+            if (updateBtnArea.parentNode) {
+                var old = updateBtnArea.parentNode.querySelector('.olcrtc-changesbox');
+                if (old) old.remove();
+                updateBtnArea.parentNode.insertBefore(box, updateBtnArea.nextSibling);
+            }
+        }
+
+        var updateCard = card('Обновление', [
+            E('div', { style: 'font-size:0.85em;color:#8b949e;margin-bottom:8px;' }, [
+                'Текущая версия OpenWRT OlcRTC Panel: ',
+                ownVersionEl
+            ]),
+            checkBtn,
+            updateBtnArea,
+            updateStatusEl
+        ]);
+
+        /* загружаем текущую версию панели */
+        self._readVersion(PANEL_VERSION_PATH).then(function (v) {
+            self._currentPanelVersion = v;
+            ownVersionEl.textContent = v || 'не определено';
+        });
+
         /* ── URI / Подписки ─────────────────────────────────── */
         var uriLabel = E('span', { style: 'margin-left:10px;font-size:0.85em;vertical-align:middle;' }, '');
         self._uriLabel = uriLabel;
@@ -1762,14 +1905,17 @@ return view.extend({
                 col(3, settingsCard)
             ]),
 
-            /* Строка 3: SOCKS5 + [Транспорт + Дополнительно в стопке] + Надёжность и лимиты */
+            /* Строка 3: SOCKS5 + [Транспорт + Дополнительно в стопке] + [Надёжность + Обновление в стопке] */
             flexRow([
                 col(2, socksCard),
                 col(2, E('div', { style: 'display:flex;flex-direction:column;min-width:0;' }, [
                     E('div', { style: 'margin-bottom:16px;' }, [transportCard]),
                     advancedCard
                 ])),
-                col(3, reliabilityCard)
+                col(2, E('div', { style: 'display:flex;flex-direction:column;min-width:0;' }, [
+                    E('div', { style: 'margin-bottom:16px;' }, [reliabilityCard]),
+                    updateCard
+                ]))
             ]),
 
             /* Подвал */

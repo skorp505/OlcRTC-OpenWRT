@@ -13,7 +13,11 @@
         "/sbin/logread": [ "exec" ],
         "/usr/bin/wget": [ "exec" ],
         "/bin/cat": [ "exec" ],
-        "/var/run/olcrtc.pid": [ "read" ]
+        "/bin/sh": [ "exec" ],
+        "/etc/olcrtc/update-panel.sh": [ "exec" ],
+        "/var/run/olcrtc.pid": [ "read" ],
+        "/etc/olcrtc/panel-version": [ "read" ],
+        "/etc/olcrtc/CHANGELOG.md": [ "read" ]
       }
     },
     "write": {
