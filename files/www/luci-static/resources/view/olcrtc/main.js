@@ -410,7 +410,13 @@ var OLCRTC_STYLE =
     '.olcrtc-theme.luci .olcrtc-hdr{color:#93c5fd!important;border-bottom-color:rgba(59,130,246,0.22)!important;}' +
     '.olcrtc-theme.luci .olcrtc-subhead{color:#7aa7e0!important;border-bottom-color:rgba(59,130,246,0.16)!important;}' +
     '.olcrtc-theme.luci .olcrtc-title{color:#e6edf3!important;}' +
-    '.olcrtc-theme.luci .olcrtc-under{background:linear-gradient(90deg,#3b82f6,#60a5fa)!important;}';
+    '.olcrtc-theme.luci .olcrtc-under{background:linear-gradient(90deg,#3b82f6,#60a5fa)!important;}' +
+    /* Поля ввода и выпадающие списки растягиваются на всю ширину
+       и выравниваются по краю рамки. */
+    '.olcrtc-theme .cbi-input-text,.olcrtc-theme .cbi-input-select,' +
+    '.olcrtc-theme input[type="number"],.olcrtc-theme input[type="text"],' +
+    '.olcrtc-theme input[type="password"],.olcrtc-theme select' +
+    '{width:100%;max-width:100%;box-sizing:border-box;min-width:0;}' ;
 
 /* Иконки заголовков карточек (инлайновый SVG, цвет через CSS-переменную темы) */
 var _OLCRTC_ICON = function (inner) {
@@ -1540,26 +1546,31 @@ return view.extend({
                 checkBtn.disabled = true;
                 updateStatusEl.textContent = 'Проверяю…';
                 updateBtnArea.style.display = 'none';
-                var cur = self._currentPanelVersion;
-                self._fetchRemoteVersion().then(function (remote) {
-                    if (!remote) {
-                        updateStatusEl.textContent = 'Не удалось получить данные о версии (нет сети?).';
+                /* Читаем установленную версию заново — исключает гонку,
+                   когда версия ещё не успела загрузиться при клике. */
+                self._readVersion(PANEL_VERSION_PATH).then(function (v) {
+                    var cur = v || self._currentPanelVersion || '';
+                    self._currentPanelVersion = cur;
+                    return self._fetchRemoteVersion().then(function (remote) {
+                        if (!remote) {
+                            updateStatusEl.textContent = 'Не удалось получить данные о версии (нет сети?).';
+                            checkBtn.disabled = false;
+                            return;
+                        }
+                        var diff = cmpVersion(remote, cur);
+                        if (diff > 0) {
+                            updateStatusEl.textContent = 'Доступна новая версия: ' + remote +
+                                ' (установлена ' + (cur || '?') + ').';
+                            self._remoteVersion = remote;
+                            buildUpdateActions();
+                        } else if (diff === 0) {
+                            updateStatusEl.textContent = 'Установлена актуальная версия (' + cur + ').';
+                        } else {
+                            updateStatusEl.textContent = 'Установленная версия (' + cur +
+                                ') новее доступной (' + remote + ').';
+                        }
                         checkBtn.disabled = false;
-                        return;
-                    }
-                    var diff = cmpVersion(remote, cur);
-                    if (diff > 0) {
-                        updateStatusEl.textContent = 'Доступна новая версия: ' + remote +
-                            ' (установлена ' + (cur || '?') + ').';
-                        self._remoteVersion = remote;
-                        buildUpdateActions();
-                    } else if (diff === 0) {
-                        updateStatusEl.textContent = 'Установлена актуальная версия (' + cur + ').';
-                    } else {
-                        updateStatusEl.textContent = 'Установленная версия (' + cur +
-                            ') новее доступной (' + remote + ').';
-                    }
-                    checkBtn.disabled = false;
+                    });
                 });
             })
         }, 'Проверить обновление');

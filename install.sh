@@ -21,6 +21,13 @@ LUCI_VIEW="${LUCI_VIEW_DIR}/main.js"
 DATA_DIR="/etc/olcrtc/data"
 DATA_NAMES_URL="${REPO_RAW}/files/etc/olcrtc/data/names"
 DATA_SURNAMES_URL="${REPO_RAW}/files/etc/olcrtc/data/surnames"
+PANEL_DIR="/etc/olcrtc"
+PANEL_VERSION_FILE="${PANEL_DIR}/panel-version"
+PANEL_VERSION_URL="${REPO_RAW}/panel-version"
+PANEL_UPDATE_SCRIPT="${PANEL_DIR}/update-panel.sh"
+PANEL_UPDATE_URL="${REPO_RAW}/update-panel.sh"
+CHANGELOG_FILE="${PANEL_DIR}/CHANGELOG.md"
+CHANGELOG_URL="${REPO_RAW}/CHANGELOG.md"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
