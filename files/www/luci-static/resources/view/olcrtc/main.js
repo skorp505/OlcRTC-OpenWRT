@@ -1121,7 +1121,8 @@ return view.extend({
         var activeProfileLabel = E('div', { style: 'font-size:0.82em;color:#8b949e;margin-bottom:10px;' }, 'Профиль: не выбран');
         self._activeProfileLabel = activeProfileLabel;
 
-        /* Логи — внутри карточки «Статус», под кнопками Старт/Стоп */
+        /* Логи — внутри карточки «Статус», под кнопками Старт/Стоп.
+           Показываются только при включённом режиме отладки (галочка debug). */
         var logsEl = E('pre', {
             style: 'background:#0a0518;color:#c4a0ff;padding:10px;min-height:240px;max-height:320px;overflow-y:auto;' +
                    'border-radius:6px;font-size:0.75em;white-space:pre-wrap;word-break:break-all;' +
@@ -1140,16 +1141,23 @@ return view.extend({
             }
         }, 'Очистить логи');
 
-        var statusSection = card('Статус', [
-            E('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;' },
-                [badgeEl, statusMetaEl]),
-            activeProfileLabel,
-            E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn]),
+        var logsContainer = E('div', {
+            style: cfg.debug === '1' ? '' : 'display:none;'
+        }, [
             E('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;' }, [
                 E('div', { class: 'olcrtc-subhead', style: 'margin:0;' }, 'Логи'),
                 logsClearBtn
             ]),
             logsEl
+        ]);
+        self._logsContainer = logsContainer;
+
+        var statusSection = card('Статус', [
+            E('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;' },
+                [badgeEl, statusMetaEl]),
+            activeProfileLabel,
+            E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn]),
+            logsContainer
         ]);
 
         /* ── Helpers ────────────────────────────────────────── */
@@ -1372,8 +1380,15 @@ return view.extend({
         var debugCheck = E('input', {
             type: 'checkbox', checked: cfg.debug === '1' ? '' : null,
             style: 'width:16px;height:16px;margin:0 10px 0 2px;flex:0 0 auto;accent-color:#3b82f6;',
-            change: function (ev) { self._saveField('debug', ev.target.checked ? '1' : '0'); }
+            change: function (ev) {
+                var on = ev.target.checked;
+                self._saveField('debug', on ? '1' : '0');
+                if (self._logsContainer) {
+                    self._logsContainer.style.display = on ? '' : 'none';
+                }
+            }
         });
+        self._debugCheck = debugCheck;
 
         /* ── Engine (auth.provider: none) ────────────────────── */
         var engineNameSel = E('select', {
