@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Rebuild olcrtc-linux-{amd64,arm64} binaries from upstream master.
 # Used by .github/workflows/build-binaries.yml; can also run locally:
-#   bash scripts/rebuild-binaries.sh <workdir>
-# Expects in workdir: upstream olcrtc checkout (dir "olcrtc") and this repo checkout (dir "panel").
+#   bash scripts/rebuild-binaries.sh <upstream-dir> <panel-dir>
 set -euo pipefail
 
-WORK="${1:-$(mktemp -d /tmp/olcrtc-rb.XXXXXX)}"
-UPSTREAM="$WORK/olcrtc"
-PANEL="$WORK/panel"
+UPSTREAM="${1:-}"
+PANEL="${2:-}"
+[ -n "$UPSTREAM" ] && [ -n "$PANEL" ] || { echo "usage: rebuild-binaries.sh <upstream-dir> <panel-dir>" >&2; exit 2; }
 
 command -v go >/dev/null 2>&1 || { echo "go not found" >&2; exit 2; }
 

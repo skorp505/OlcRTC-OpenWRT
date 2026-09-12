@@ -12,16 +12,12 @@ jobs:
   rebuild:
     runs-on: ubuntu-latest
     steps:
-      - name: Create workdir
-        run: mkdir -p /tmp/olcrtc-rb/panel /tmp/olcrtc-rb/olcrtc
-
       - name: Checkout OpenWRT repo
         uses: actions/checkout@v4
-        with:
-          path: /tmp/olcrtc-rb/panel
 
       - name: Clone upstream olcrtc
-        run: git clone --depth=50 https://github.com/openlibrecommunity/olcrtc.git /tmp/olcrtc-rb/olcrtc
+        working-directory: /tmp
+        run: git clone --depth=50 https://github.com/openlibrecommunity/olcrtc.git /tmp/olcrtc-upstream
 
       - uses: actions/setup-go@v5
         with:
@@ -30,7 +26,7 @@ jobs:
       - name: Rebuild binaries
         id: rebuild
         run: |
-          OUT="$(bash /tmp/olcrtc-rb/panel/scripts/rebuild-binaries.sh /tmp/olcrtc-rb)"
+          OUT="$(bash "$GITHUB_WORKSPACE/scripts/rebuild-binaries.sh" /tmp/olcrtc-upstream "$GITHUB_WORKSPACE")"
           echo "$OUT"
           echo "result<<EOF" >> "$GITHUB_OUTPUT"
           echo "$OUT" >> "$GITHUB_OUTPUT"
@@ -38,31 +34,32 @@ jobs:
 
       - name: Skip if unchanged
         if: contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
-        run: echo "upstream unchanged, nothing to do" && exit 0
+        run: echo "upstream unchanged, nothing to do"
 
       - name: Update version and changelog
+        if: ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
         run: |
-          cd /tmp/olcrtc-rb/panel
-          SHA="$(git -C /tmp/olcrtc-rb/olcrtc rev-parse --short HEAD)"
+          cd "$GITHUB_WORKSPACE"
+          SHA="$(git -C /tmp/olcrtc-upstream rev-parse --short HEAD)"
           VER="$(cat panel-version)"
           MAJOR="${VER%%.*}"
           VER_BODY="${VER#*.}"
           MINOR="${VER_BODY%%.*}"
-          PATCH="${VER_BODY#*.}"
-          PEER_VER="${MAJOR}.$((MINOR + 1)).${PATCH#*.}"
-          echo "$PEER_VER" > panel-version
-          # prepend changelog entry
+          NEW_VER="${MAJOR}.$((MINOR + 1)).0"
+          echo "$NEW_VER" > panel-version
           TMP="$(mktemp)"
-          { echo "## $PEER_VER"; echo "- Пересобраны бинарники olcrtc (amd64/arm64) из upstream ($SHA)."; echo "- Синхронизированы словари names/surnames."; echo ""; cat CHANGELOG.md; } > "$TMP"
+          { echo "## $NEW_VER"; echo "- Пересобраны бинарники olcrtc (amd64/arm64) из upstream ($SHA)."; echo "- Синхронизированы словари names/surnames."; echo ""; cat CHANGELOG.md; } > "$TMP"
           mv "$TMP" CHANGELOG.md
-          git -C /tmp/olcrtc-rb/olcrtc rev-parse HEAD > .upstream-sha
-          echo "version=$PEER_VER upstream=$SHA" >&2
+          git -C /tmp/olcrtc-upstream rev-parse HEAD > .upstream-sha
+          echo "version=$NEW_VER upstream=$SHA" >&2
 
       - name: Commit and push
+        if: ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
         run: |
-          cd /tmp/olcrtc-rb/panel
+          cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add olcrtc-linux-amd64 olcrtc-linux-arm64 files/etc/olcrtc/data/names files/etc/olcrtc/data/surnames panel-version CHANGELOG.md .upstream-sha scripts/rebuild-binaries.sh
+          SHA="$(git -C /tmp/olcrtc-upstream rev-parse --short HEAD)"
           git commit -m "Rebuild olcrtc binaries from upstream $SHA"
           git push origin main
