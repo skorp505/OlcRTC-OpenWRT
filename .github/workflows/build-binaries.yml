@@ -37,7 +37,7 @@ jobs:
         run: echo "upstream unchanged, nothing to do"
 
       - name: Update version and changelog
-        if: ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
+        if: ${{ ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
         run: |
           cd "$GITHUB_WORKSPACE"
           SHA="$(git -C /tmp/olcrtc-upstream rev-parse --short HEAD)"
@@ -54,7 +54,7 @@ jobs:
           echo "version=$NEW_VER upstream=$SHA" >&2
 
       - name: Commit and push
-        if: ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
+        if: ${{ ! contains(steps.rebuild.outputs.result, 'NO_CHANGE=1')
         run: |
           cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
