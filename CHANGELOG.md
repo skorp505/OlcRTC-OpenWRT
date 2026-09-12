@@ -1,3 +1,7 @@
+## 1.11.0
+- Пересобраны бинарники olcrtc (amd64/arm64) из upstream (189d16c).
+- Синхронизированы словари names/surnames.
+
 # Changelog — OlcRTC-OpenWRT
 
 Здесь собраны изменения панели OpenWRT OlcRTC Panel по версиям.
