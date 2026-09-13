@@ -67,16 +67,18 @@ wget -q -O "$DATA_DIR/surnames" "${REPO_RAW}/files/etc/olcrtc/data/surnames" || 
 
 # ── Файлы панели: версия / скрипт / changelog ──────────────
 mkdir -p "$PANEL_DIR"
-wget -q -O "$PANEL_VERSION_FILE" "${REPO_RAW}/panel-version" || warn "не удалось обновить версию"
+wget -q -O "$PANEL_VERSION_FILE" "${REPO_RAW}/panel-version" || { echo "[ОШ] файл версии не скачан"; exit 1; }
 wget -q -O "$PANEL_UPDATE_SCRIPT" "${REPO_RAW}/update-panel.sh" || warn "не удалось обновить скрипт обновления"
 chmod 755 "$PANEL_UPDATE_SCRIPT" 2>/dev/null || true
 wget -q -O "$CHANGELOG_FILE" "${REPO_RAW}/CHANGELOG.md" || warn "не удалось обновить CHANGELOG"
 
-# ── Перезапуск сервисов ────────────────────────────────────
-/etc/init.d/rpcd   restart 2>/dev/null || warn "rpcd не перезапущен"
-/etc/init.d/uhttpd restart 2>/dev/null || warn "uhttpd не перезапущен"
+[ -s "$PANEL_VERSION_FILE" ] || { echo "[ОШ] файл версии пуст после скачивания"; exit 1; }
 
 NEW_VERSION="$(cat "$PANEL_VERSION_FILE" 2>/dev/null || echo '?')"
 [ "$QUIET" = "1" ] || echo "Обновление завершено. Версия: ${NEW_VERSION}"
 echo "VERSION=$NEW_VERSION"
+
+# Перезапуск сервисов — в фоне с задержкой, чтобы rpcd успел
+# отправить ответ панели перед перезапуском (иначе RPC-сессия обрывается)
+( sleep 2; /etc/init.d/rpcd restart; /etc/init.d/uhttpd restart ) &
 exit 0

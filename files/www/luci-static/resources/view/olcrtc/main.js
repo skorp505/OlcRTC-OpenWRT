@@ -1529,9 +1529,17 @@ return view.extend({
         var updateStatusEl = E('div', { style: 'font-size:0.78em;color:#8b949e;margin-top:6px;' }, 'Нажмите «Проверить обновление».');
         var updateBtnArea  = E('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;display:none;' }, []);
 
+        /* Извлечь stdout из ответа LuCI file.exec (бывает и строкой, и {stdout}) */
+        function execOut(res) {
+            if (res == null) return '';
+            if (typeof res === 'string') return res;
+            if (res.stdout != null) return String(res.stdout);
+            return String(res);
+        }
+
         self._readVersion = function (path) {
             return callExec('/bin/cat', [path], null)
-                .then(function (res) { return (res || '').toString().trim(); })
+                .then(function (res) { return execOut(res).trim(); })
                 .catch(function () { return ''; });
         };
 
@@ -1601,13 +1609,24 @@ return view.extend({
                     updateStatusEl.textContent = 'Обновление… это может занять время.';
                     callExec('/bin/sh', ['-c', '/etc/olcrtc/update-panel.sh -y'], null)
                         .then(function (res) {
-                            var m = /VERSION=(\S+)/.exec((res || '').toString());
-                            updateStatusEl.textContent = 'Обновление завершено. Версия: ' +
-                                (m ? m[1] : ver) + '.';
-                            self._currentPanelVersion = m ? m[1] : ver;
-                            ownVersionEl.textContent = self._currentPanelVersion;
-                            updateStatusEl.textContent += ' Обновите страницу.';
-                            updateBtnArea.style.display = 'none';
+                            var out = execOut(res);
+                            var m = /VERSION=(\S+)/.exec(out);
+                            var newVer = m ? m[1] : '';
+                            var ok = newVer && cmpVersion(newVer, ver) >= 0;
+                            if (ok) {
+                                self._currentPanelVersion = newVer;
+                                ownVersionEl.textContent = newVer;
+                                updateStatusEl.textContent = 'Обновление завершено. Версия: ' +
+                                    newVer + '. Обновите страницу.';
+                                updateBtnArea.style.display = 'none';
+                            } else {
+                                var hint = out ? '\n' + out.slice(-800) : '';
+                                updateStatusEl.textContent = newVer
+                                    ? 'Обновление завершено не полностью: версия на диске ' + newVer +
+                                      ' (ожидалось ≥ ' + ver + ').' + hint
+                                    : 'Скрипт обновления не вернул версию.' + hint;
+                                updateBtn.disabled = false;
+                            }
                         })
                         .catch(function (err) {
                             updateStatusEl.textContent = 'Ошибка обновления: ' + err + '.';
