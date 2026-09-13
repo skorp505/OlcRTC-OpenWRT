@@ -26,6 +26,19 @@ GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[ОК]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[!!]${NC} $*"; }
 
+# Атомарное скачивание: во временный файл + mv. Перезаписывать
+# напрямую запущенный бинарник нельзя (ETXTBSY "Text file busy").
+dl() { # url dst; ошибка фатальна
+    wget -q -O "$2.tmp" "$1" || { rm -f "$2.tmp"; echo "[ОШ] не удалось скачать: $2"; exit 1; }
+    [ -s "$2.tmp" ] || { rm -f "$2.tmp"; echo "[ОШ] файл пуст: $2"; exit 1; }
+    mv -f "$2.tmp" "$2"
+}
+dlw() { # url dst; ошибка не фатальна
+    wget -q -O "$2.tmp" "$1" || { rm -f "$2.tmp"; warn "не удалось обновить: $2"; return 0; }
+    [ -s "$2.tmp" ] || { rm -f "$2.tmp"; warn "файл пуст: $2"; return 0; }
+    mv -f "$2.tmp" "$2"
+}
+
 # Тихий режим для вызова из LuCI
 if [ "${1:-}" = "-y" ]; then QUIET=1; else QUIET=0; fi
 
@@ -44,33 +57,33 @@ esac
 [ "$QUIET" = "1" ] || echo "Обновление OlcRTC-OpenWRT (${ARCH})..."
 
 # ── Скачиваем бинарник olcrtc ──────────────────────────────
-wget -q -O "$BINARY_DST" "$BINARY_URL" || { echo "[ОШ] не удалось скачать бинарник"; exit 1; }
+dl "$BINARY_URL" "$BINARY_DST"
 chmod 755 "$BINARY_DST"
 [ "$QUIET" = "1" ] || info "бинарник обновлён: $BINARY_DST"
 
 # ── init.d ─────────────────────────────────────────────────
-wget -q -O "$INITD" "${REPO_RAW}/files/etc/init.d/olcrtc" || { echo "[ОШ] init.d"; exit 1; }
+dl "${REPO_RAW}/files/etc/init.d/olcrtc" "$INITD"
 chmod 755 "$INITD"
 [ "$QUIET" = "1" ] || info "init.d обновлён"
 
 # ── LuCI: меню / ACL / вид ─────────────────────────────────
 mkdir -p "$(dirname "$LUCI_MENU")" "$(dirname "$LUCI_ACL")" "$LUCI_VIEW_DIR"
-wget -q -O "$LUCI_MENU" "${REPO_RAW}/files/usr/share/luci/menu.d/luci-app-olcrtc.json" || { echo "[ОШ] меню"; exit 1; }
-wget -q -O "$LUCI_ACL" "${REPO_RAW}/files/usr/share/rpcd/acl.d/luci-app-olcrtc.json" || { echo "[ОШ] acl"; exit 1; }
-wget -q -O "$LUCI_VIEW" "${REPO_RAW}/files/www/luci-static/resources/view/olcrtc/main.js" || { echo "[ОШ] main.js"; exit 1; }
+dl "${REPO_RAW}/files/usr/share/luci/menu.d/luci-app-olcrtc.json" "$LUCI_MENU"
+dl "${REPO_RAW}/files/usr/share/rpcd/acl.d/luci-app-olcrtc.json" "$LUCI_ACL"
+dl "${REPO_RAW}/files/www/luci-static/resources/view/olcrtc/main.js" "$LUCI_VIEW"
 [ "$QUIET" = "1" ] || info "LuCI интерфейс обновлён"
 
 # ── Data: names / surnames ─────────────────────────────────
 mkdir -p "$DATA_DIR"
-wget -q -O "$DATA_DIR/names"    "${REPO_RAW}/files/etc/olcrtc/data/names"    || warn "data/names не обновлён"
-wget -q -O "$DATA_DIR/surnames" "${REPO_RAW}/files/etc/olcrtc/data/surnames" || warn "data/surnames не обновлён"
+dlw "${REPO_RAW}/files/etc/olcrtc/data/names"    "$DATA_DIR/names"
+dlw "${REPO_RAW}/files/etc/olcrtc/data/surnames" "$DATA_DIR/surnames"
 
 # ── Файлы панели: версия / скрипт / changelog ──────────────
 mkdir -p "$PANEL_DIR"
-wget -q -O "$PANEL_VERSION_FILE" "${REPO_RAW}/panel-version" || { echo "[ОШ] файл версии не скачан"; exit 1; }
-wget -q -O "$PANEL_UPDATE_SCRIPT" "${REPO_RAW}/update-panel.sh" || warn "не удалось обновить скрипт обновления"
+dl "${REPO_RAW}/panel-version" "$PANEL_VERSION_FILE"
+dlw "${REPO_RAW}/update-panel.sh" "$PANEL_UPDATE_SCRIPT"
 chmod 755 "$PANEL_UPDATE_SCRIPT" 2>/dev/null || true
-wget -q -O "$CHANGELOG_FILE" "${REPO_RAW}/CHANGELOG.md" || warn "не удалось обновить CHANGELOG"
+dlw "${REPO_RAW}/CHANGELOG.md" "$CHANGELOG_FILE"
 
 [ -s "$PANEL_VERSION_FILE" ] || { echo "[ОШ] файл версии пуст после скачивания"; exit 1; }
 

@@ -61,8 +61,10 @@ esac
 
 # ── Скачиваем бинарник ────────────────────────────────────
 info "Скачиваем бинарник olcrtc (${ARCH_NAME})..."
-wget -q -O "$BINARY_DST" "$BINARY_URL" || \
-    error "Не удалось скачать бинарник с $BINARY_URL"
+wget -q -O "$BINARY_DST.tmp" "$BINARY_URL" || \
+    { rm -f "$BINARY_DST.tmp"; error "Не удалось скачать бинарник с $BINARY_URL"; }
+[ -s "$BINARY_DST.tmp" ] || { rm -f "$BINARY_DST.tmp"; error "Файл бинарника пуст: $BINARY_URL"; }
+mv -f "$BINARY_DST.tmp" "$BINARY_DST"
 chmod 755 "$BINARY_DST"
 info "Бинарник установлен: $BINARY_DST (${ARCH_NAME})"
 
