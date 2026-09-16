@@ -1527,7 +1527,7 @@ return view.extend({
         var PANEL_VERSION_PATH = '/etc/olcrtc/panel-version';
         var ownVersionEl = E('span', { style: 'color:#e2d9f3;font-weight:600;' }, '…');
         var updateStatusEl = E('div', { style: 'font-size:0.78em;color:#8b949e;margin-top:6px;' }, 'Нажмите «Проверить обновление».');
-        var updateBtnArea  = E('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;display:none;' }, []);
+        var updateBtnArea  = E('div', { style: 'display:flex;flex-wrap:nowrap;gap:8px;align-items:center;margin-top:10px;display:none;' }, []);
 
         /* Извлечь stdout из ответа LuCI file.exec (бывает и строкой, и {stdout}) */
         function execOut(res) {
@@ -1675,7 +1675,7 @@ return view.extend({
                             showChanges(md || 'Нет описания изменений.');
                         });
                 })
-            }, 'Изменения в новой версии');
+            }, 'Изменения');
 
             updateBtnArea.appendChild(updateBtn);
             updateBtnArea.appendChild(changesBtn);
