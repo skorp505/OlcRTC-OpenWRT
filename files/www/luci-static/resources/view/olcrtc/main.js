@@ -1598,6 +1598,46 @@ return view.extend({
             })
         }, 'Проверить обновление');
 
+        /* Скачивание бинарника идёт дольше, чем живой RPC-запрос LuCI
+           (~20 c — L.env.rpctimeout). Синхронный file.exec при этом обрывается
+           с «XHR request timed out», поэтому скрипт запускаем в фоне (setsid),
+           вывод пишем в лог, а панель опрашивает лог до появления VERSION=… */
+        var UPDATE_LOG_PATH      = '/tmp/olcrtc-update.log';
+        var UPDATE_POLL_INTERVAL = 2000;          /* мс */
+        var UPDATE_WATCHDOG_MS   = 6 * 60 * 1000; /* 6 минут */
+
+        function updatePoll(resolve, reject, started) {
+            if (Date.now() - started > UPDATE_WATCHDOG_MS) {
+                reject(new Error('превышено время ожидания (6 мин). См. ' + UPDATE_LOG_PATH));
+                return;
+            }
+            self._readVersion(UPDATE_LOG_PATH).then(function (txt) {
+                var m = /VERSION=(\S+)/.exec(txt || '');
+                if (m) { resolve(m[1]); return; }
+                if (/\[ОШ\]/.test(txt || '')) {
+                    reject(new Error((txt || '').replace(/\s+/g, ' ').slice(-400)));
+                    return;
+                }
+                setTimeout(function () { updatePoll(resolve, reject, started); },
+                           UPDATE_POLL_INTERVAL);
+            }).catch(function () {
+                /* rpcd/uhttpd могут перезапускаться в момент опроса — просто ждём */
+                setTimeout(function () { updatePoll(resolve, reject, started); },
+                           UPDATE_POLL_INTERVAL);
+            });
+        }
+
+        function startUpdate() {
+            return callExec('/bin/sh', ['-c',
+                    'rm -f ' + UPDATE_LOG_PATH + '; setsid /etc/olcrtc/update-panel.sh -y ' +
+                    '>' + UPDATE_LOG_PATH + ' 2>&1 &'], null)
+                .then(function () {
+                    return new Promise(function (resolve, reject) {
+                        updatePoll(resolve, reject, Date.now());
+                    });
+                });
+        }
+
         function buildUpdateActions() {
             updateBtnArea.innerHTML = '';
             var ver = self._remoteVersion || '?';
@@ -1606,32 +1646,21 @@ return view.extend({
                 style : 'font-size:0.8em;padding:4px 12px;',
                 click : ui.createHandlerFn(self, function () {
                     updateBtn.disabled = true;
-                    updateStatusEl.textContent = 'Обновление… это может занять время.';
-                    callExec('/bin/sh', ['-c', '/etc/olcrtc/update-panel.sh -y'], null)
-                        .then(function (res) {
-                            var out = execOut(res);
-                            var m = /VERSION=(\S+)/.exec(out);
-                            var newVer = m ? m[1] : '';
-                            var ok = newVer && cmpVersion(newVer, ver) >= 0;
-                            if (ok) {
-                                self._currentPanelVersion = newVer;
-                                ownVersionEl.textContent = newVer;
-                                updateStatusEl.textContent = 'Обновление завершено. Версия: ' +
-                                    newVer + '. Обновите страницу.';
-                                updateBtnArea.style.display = 'none';
-                            } else {
-                                var hint = out ? '\n' + out.slice(-800) : '';
-                                updateStatusEl.textContent = newVer
-                                    ? 'Обновление завершено не полностью: версия на диске ' + newVer +
-                                      ' (ожидалось ≥ ' + ver + ').' + hint
-                                    : 'Скрипт обновления не вернул версию.' + hint;
-                                updateBtn.disabled = false;
-                            }
-                        })
-                        .catch(function (err) {
-                            updateStatusEl.textContent = 'Ошибка обновления: ' + err + '.';
-                            updateBtn.disabled = false;
-                        });
+                    updateStatusEl.textContent = 'Обновление запущено. Идёт загрузка и ' +
+                        'установка… обычно 1–3 минуты. Не закрывайте страницу.';
+                    startUpdate().then(function (newVer) {
+                        if (!(newVer && cmpVersion(newVer, ver) >= 0))
+                            throw new Error('скрипт вернул неожиданную версию: ' + newVer);
+                        self._currentPanelVersion = newVer;
+                        ownVersionEl.textContent = newVer;
+                        updateStatusEl.textContent = 'Обновление завершено. Версия: ' +
+                            newVer + '. Обновите страницу.';
+                        updateBtnArea.style.display = 'none';
+                    }).catch(function (err) {
+                        updateStatusEl.textContent = 'Ошибка обновления: ' +
+                            ((err && err.message) ? err.message : err) + '.';
+                        updateBtn.disabled = false;
+                    });
                 })
             }, 'Обновить');
 
