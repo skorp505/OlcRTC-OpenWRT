@@ -322,6 +322,14 @@ function getStatus() {
     }).catch(function () { return { running: false, pid: null }; });
 }
 
+/* Автозапуск: включён, если существует симлинк /etc/rc.d/S95olcrtc
+   (создаётся через «/etc/init.d/olcrtc enable»). */
+function getAutostart() {
+    return callExec('/bin/sh', ['-c', 'test -e /etc/rc.d/S95olcrtc && echo 1 || echo 0'], null)
+        .then(function (out) { return /1/.test(out || ''); })
+        .catch(function () { return false; });
+}
+
 function getLogs() {
     return callExec('/sbin/logread', ['-e', 'olcrtc'], null)
         .then(function (res) {
@@ -478,6 +486,8 @@ return view.extend({
     _logsCleared         : false,
     _startBtn            : null,
     _stopBtn             : null,
+    _autostartBtn        : null,
+    _autostart           : false,   /* включён ли автозапуск (init.d enable) */
     _transportSel        : null,
     _carrierSel          : null,
     _roomInput           : null,
@@ -548,6 +558,21 @@ return view.extend({
         if (this._stopBtn) {
             this._stopBtn.disabled       = !status.running;
             this._stopBtn.style.opacity  = !status.running ? '0.5' : '1';
+        }
+    },
+
+    /* Кнопка-тумблер автозапуска: подпись = действие, которое будет выполнено */
+    _updateAutostartUI: function () {
+        var btn = this._autostartBtn;
+        if (!btn) return;
+        btn.disabled     = false;
+        btn.style.opacity = '1';
+        if (this._autostart) {
+            btn.className  = 'btn cbi-button cbi-button-reset';
+            btn.textContent = 'Автозапуск выкл.';
+        } else {
+            btn.className   = 'btn cbi-button cbi-button-apply';
+            btn.textContent = 'Автозапуск вкл.';
         }
     },
 
@@ -1114,9 +1139,39 @@ return view.extend({
             })
         }, '■ Стоп');
 
+        /* Тумблер автозапуска: вкл = старт клиента после перезагрузки роутера
+           (создаёт/удаляет симлинк /etc/rc.d/S95olcrtc через init.d enable/disable) */
+        var autostartBtn = E('button', {
+            class : 'btn cbi-button cbi-button-apply',
+            style : 'margin-left:8px',
+            click : ui.createHandlerFn(self, function () {
+                var enable = !self._autostart;
+                autostartBtn.disabled = true;
+                autostartBtn.style.opacity = '0.5';
+                return callInitAction('olcrtc', enable ? 'enable' : 'disable')
+                    .then(function () {
+                        self._toast(enable
+                            ? 'Автозапуск включён — клиент стартует после перезагрузки'
+                            : 'Автозапуск выключен');
+                        self._autostart = enable;
+                        self._updateAutostartUI();
+                    })
+                    .catch(function (e) {
+                        self._autostart = !enable;
+                        self._updateAutostartUI();
+                        ui.addNotification(null, E('p', 'Ошибка: ' + (e.message || e)), 'error');
+                    });
+            })
+        }, 'Автозапуск вкл.');
+
         self._startBtn = startBtn;
         self._stopBtn  = stopBtn;
+        self._autostartBtn = autostartBtn;
         self._updateUI(initStatus);
+        getAutostart().then(function (en) {
+            self._autostart = en;
+            self._updateAutostartUI();
+        });
 
         var activeProfileLabel = E('div', { style: 'font-size:0.82em;color:#8b949e;margin-bottom:10px;' }, 'Профиль: не выбран');
         self._activeProfileLabel = activeProfileLabel;
@@ -1156,7 +1211,7 @@ return view.extend({
             E('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;' },
                 [badgeEl, statusMetaEl]),
             activeProfileLabel,
-            E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn]),
+            E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn, autostartBtn]),
             logsContainer
         ]);
 
