@@ -14,6 +14,7 @@
         "/usr/bin/wget": [ "exec" ],
         "/bin/cat": [ "exec" ],
         "/bin/sh": [ "exec" ],
+        "/sbin/start-stop-daemon": [ "exec" ],
         "/etc/olcrtc/update-panel.sh": [ "exec" ],
         "/var/run/olcrtc.pid": [ "read" ],
         "/etc/olcrtc/panel-version": [ "read" ],

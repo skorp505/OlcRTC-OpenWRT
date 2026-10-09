@@ -1683,15 +1683,18 @@ return view.extend({
         }
 
         function startUpdate() {
-            /* rpcd file.exec — синхронный: держит RPC-запрос, пока прямой
-               процесс не завершится и rpcd не увидит EOF по stdout/stderr.
-               Если фоновый скрипт держит хоть один дескриптор rpcd открытым,
-               LuCI ловит «XHR request timed out» через ~20 c (L.env.rpctimeout).
-               Полный отвяз: stdin из /dev/null, вывод — в лог, nohup и
-               мгновенный «echo started», чтобы exec вернулся сразу. */
-            return callExec('/bin/sh', ['-c',
-                    'rm -f ' + UPDATE_LOG_PATH + '; nohup /etc/olcrtc/update-panel.sh -y ' +
-                    '>' + UPDATE_LOG_PATH + ' 2>&1 </dev/null & echo started'], null)
+            /* rpcd file.exec держит RPC-запрос, пока жив любой потомок
+               цепочки: на прошивке роутера команда «setsid … & » блокировала
+               запрос ~30 c и убивала фоновый процесс — отсюда
+               «XHR request timed out» (лимит LuCI ~20 c). start-stop-daemon -b
+               делает double-fork: демон осиротевшим уходит под PID 1, rpcd
+               мгновенно получает EOF и возвращает ответ. Результат панель
+               читает опросом лога. */
+            return callExec('/sbin/start-stop-daemon', [
+                    '-S', '-b', '-q', '-x', '/bin/sh', '--', '-c',
+                    'rm -f ' + UPDATE_LOG_PATH + '; /etc/olcrtc/update-panel.sh -y ' +
+                    '>' + UPDATE_LOG_PATH + ' 2>&1'
+                ], null)
                 .then(function () {
                     return new Promise(function (resolve, reject) {
                         updatePoll(resolve, reject, Date.now());
