@@ -1210,7 +1210,7 @@ return view.extend({
                 [badgeEl, statusMetaEl]),
             activeProfileLabel,
             E('div', {
-                style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;'
+                style: 'display:flex;flex-wrap:nowrap;align-items:stretch;gap:8px;margin-bottom:14px;white-space:nowrap;'
             }, [startBtn, stopBtn, autostartBtn]),
             logsContainer
         ]);
