@@ -1110,7 +1110,7 @@ return view.extend({
 
         var startBtn = E('button', {
             class : 'btn cbi-button cbi-button-apply',
-            style : 'flex:1 1 0;text-align:center;height:32px;box-sizing:border-box;',
+            style : 'margin-right:8px',
             click : ui.createHandlerFn(self, function () {
                 startBtn.disabled = stopBtn.disabled = true;
                 startBtn.style.opacity = stopBtn.style.opacity = '0.5';
@@ -1126,7 +1126,6 @@ return view.extend({
 
         var stopBtn = E('button', {
             class : 'btn cbi-button cbi-button-reset',
-            style : 'flex:1 1 0;text-align:center;height:32px;box-sizing:border-box;',
             click : ui.createHandlerFn(self, function () {
                 startBtn.disabled = stopBtn.disabled = true;
                 startBtn.style.opacity = stopBtn.style.opacity = '0.5';
@@ -1144,7 +1143,7 @@ return view.extend({
            (создаёт/удаляет симлинк /etc/rc.d/S95olcrtc через init.d enable/disable) */
         var autostartBtn = E('button', {
             class : 'btn cbi-button cbi-button-apply',
-            style : 'flex:0 0 auto;font-size:0.85em;padding:3px 11px;height:32px;box-sizing:border-box;',
+            style : 'margin-left:8px',
             click : ui.createHandlerFn(self, function () {
                 var enable = !self._autostart;
                 autostartBtn.disabled = true;
@@ -1212,9 +1211,7 @@ return view.extend({
             E('div', { style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;' },
                 [badgeEl, statusMetaEl]),
             activeProfileLabel,
-            E('div', {
-                style: 'display:flex;flex-wrap:nowrap;align-items:stretch;gap:8px;margin-bottom:14px;white-space:nowrap;'
-            }, [startBtn, stopBtn, autostartBtn]),
+            E('div', { style: 'margin-bottom:14px;' }, [startBtn, stopBtn, autostartBtn]),
             logsContainer
         ]);
 
