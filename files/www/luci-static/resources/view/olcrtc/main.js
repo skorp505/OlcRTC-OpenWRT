@@ -1683,9 +1683,15 @@ return view.extend({
         }
 
         function startUpdate() {
+            /* rpcd file.exec — синхронный: держит RPC-запрос, пока прямой
+               процесс не завершится и rpcd не увидит EOF по stdout/stderr.
+               Если фоновый скрипт держит хоть один дескриптор rpcd открытым,
+               LuCI ловит «XHR request timed out» через ~20 c (L.env.rpctimeout).
+               Полный отвяз: stdin из /dev/null, вывод — в лог, nohup и
+               мгновенный «echo started», чтобы exec вернулся сразу. */
             return callExec('/bin/sh', ['-c',
-                    'rm -f ' + UPDATE_LOG_PATH + '; setsid /etc/olcrtc/update-panel.sh -y ' +
-                    '>' + UPDATE_LOG_PATH + ' 2>&1 &'], null)
+                    'rm -f ' + UPDATE_LOG_PATH + '; nohup /etc/olcrtc/update-panel.sh -y ' +
+                    '>' + UPDATE_LOG_PATH + ' 2>&1 </dev/null & echo started'], null)
                 .then(function () {
                     return new Promise(function (resolve, reject) {
                         updatePoll(resolve, reject, Date.now());
