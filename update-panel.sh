@@ -8,6 +8,10 @@
 
 set -e
 
+# Файлы должны быть читаемы uhttpd/rpcd: скрипт может выполняться из rpcd
+# (umask 0777) — без этого main.js лежал бы 600 и LuCI отдавал HTTP 403.
+umask 022
+
 REPO_RAW="https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main"
 BINARY_DST="/usr/bin/olcrtc"
 INITD="/etc/init.d/olcrtc"

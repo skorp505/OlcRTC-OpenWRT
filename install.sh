@@ -8,6 +8,11 @@
 
 set -e
 
+# Файлы должны быть читаемы uhttpd/rpcd: если скрипт запущен из контекста
+# со строгим umask (например 0777), файлы панели лягут с правами 600 и
+# LuCI отдаст HTTP 403. Приводим umask к 022.
+umask 022
+
 REPO_RAW="https://raw.githubusercontent.com/skorp505/OlcRTC-OpenWRT/main"
 BINARY_ARM64_URL="${REPO_RAW}/olcrtc-linux-arm64"
 BINARY_AMD64_URL="${REPO_RAW}/olcrtc-linux-amd64"
